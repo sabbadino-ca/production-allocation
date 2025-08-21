@@ -1,0 +1,18 @@
+maximize same family in same plant 
+maximize same order in same plant 
+maximize allocations by item quantity (20 sedute)
+
+
+from CLAUDE : 
+
+Missing Hard Constraints:
+
+  - No minimum production lot sizes 
+
+  Missing Soft Constraints:
+
+  - Load balancing: No preference to distribute work evenly across plants
+  - Plant family preferences: Doesn't use plantfamily field for optimization(TO CHECK) 
+  - Order completeness: No bonus for completing entire orders vs. partial
+  - Plant utilization: No penalty for underutilized capacity
+  - Model family grouping: No preference to co-locate related models
