@@ -18,59 +18,11 @@ Docs: CpModel.NewIntVar, CpModel.Add
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, TypedDict, Literal
+from typing import Dict, List, Tuple
 from domain_types import Plant, Order, Item
+from allocation_types import AllocationRow, SkippedRow, Summary, AllocateResult, UnallocatedRow
 from ortools.sat.python import cp_model
 from datetime import datetime
-
-class AllocationRow(TypedDict):
-  """One non-zero allocation row in the result."""
-  plantid: int
-  order: str
-  model: str
-  submodel: str
-  allocated_qty: int
-
-
-class SkippedRow(TypedDict):
-  """One item that was skipped during modeling and the reason why."""
-  order: str
-  order_index: int
-  model: str
-  submodel: str
-  quantity: int
-  reason: Literal["no_compatible_plant"]
-
-
-class Summary(TypedDict):
-  """Aggregated statistics about the modeled instance and solve status."""
-  plants_count: int
-  orders_count: int
-  unique_models_count: int
-  total_capacity: int
-  total_demand: int
-  capacity_minus_demand: int
-  skipped_count: int
-  skipped_demand: int
-  status: str
-
-
-class AllocateResult(TypedDict):
-  """Result container for allocate()."""
-  summary: Summary
-  allocations: List[AllocationRow]
-  skipped: List[SkippedRow]
-  unallocated: List["UnallocatedRow"]
-
-
-class UnallocatedRow(TypedDict):
-  """One item that could not be placed due to capacity or packing limits."""
-  order: str
-  order_index: int
-  model: str
-  submodel: str
-  requested_qty: int
-  reason: Literal["insufficient_capacity"]
 
 
 def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
@@ -281,7 +233,7 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
   solver = cp_model.CpSolver()
   status = solver.Solve(model)
 
-  def status_to_str(s: object) -> Literal["OPTIMAL", "FEASIBLE", "INFEASIBLE", "MODEL_INVALID", "UNKNOWN"]:
+  def status_to_str(s: object) -> str:
     if s == cp_model.OPTIMAL:
       return "OPTIMAL"
     if s == cp_model.FEASIBLE:
