@@ -2,6 +2,8 @@ maximize same family in same plant
 maximize same order in same plant 
 maximize allocations by item quantity (20 sedute)
 
+LOOP : after one loop is done , if something was left oout (un assigned) .. run again (next week)
+
 
 from CLAUDE : 
 

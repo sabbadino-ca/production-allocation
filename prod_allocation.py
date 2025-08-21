@@ -65,6 +65,10 @@ def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
     for item in order["items"]:
       if not all(k in item for k in ("modelFamily", "model", "submodel", "quantity")):
         raise ValueError(f"Missing required item fields in: {item}")
+      # Validate quantity is non-negative
+      quantity = item.get("quantity", 0)
+      if not isinstance(quantity, (int, float)) or quantity < 0:
+        raise ValueError(f"Item quantity must be >= 0 but got {quantity} in: {item}")
 
 
 def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -> AllocateResult:

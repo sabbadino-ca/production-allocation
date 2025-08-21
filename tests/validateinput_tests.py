@@ -1,9 +1,11 @@
 """
-Unit tests for data_loader.py input parsing.
+Unit tests for data_loader.py input parsing and validation.
 """
 import unittest
 import os
+from datetime import datetime
 from data_loader import load_plants, load_orders
+from prod_allocation import allocate
 
 TEST_PLANTS = os.path.join(os.path.dirname(__file__), 'plants-info-1.json')
 TEST_ORDERS = os.path.join(os.path.dirname(__file__), 'to_be_allocated-1.json')
@@ -119,6 +121,27 @@ class TestDataLoader(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_orders(tf.name)
         os.remove(tf.name)
+
+    def test_negative_quantity_validation(self) -> None:
+        """Negative quantities should be rejected during validation."""
+        plants = [
+            {"plantid": 1, "plantfamily": "F1", "capacity": 100, "allowedModels": ["M1"]},
+        ]
+        # Create order with negative quantity to test validation
+        orders = [
+            {
+                "order": "O1", 
+                "dueDate": "2025-01-01",
+                "items": [{"modelFamily": "F1", "model": "M1", "submodel": "S1", "quantity": -5}]
+            }
+        ]
+        current_date = datetime(2025, 8, 21)
+        
+        with self.assertRaises(ValueError) as context:
+            allocate(plants, orders, current_date)
+        
+        self.assertIn("Item quantity must be >= 0", str(context.exception))
+        self.assertIn("got -5", str(context.exception))
 
 if __name__ == '__main__':
     unittest.main()
