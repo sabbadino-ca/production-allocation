@@ -1,0 +1,59 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "D:/repos/personal-devops-ca/production-allocation/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"discover",
+				"-s",
+				"tests",
+				"-p",
+				"allocation.py",
+				"-v"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$pytest-python"
+			],
+			"group": "test"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "D:/repos/personal-devops-ca/production-allocation/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"discover",
+				"-s",
+				"tests",
+				"-p",
+				"allocation.py",
+				"-v"
+			],
+			"isBackground": false,
+			"group": "test"
+		},
+		{
+			"label": "Run unit tests",
+			"type": "shell",
+			"command": "D:/repos/personal-devops-ca/production-allocation/.venv/Scripts/python.exe",
+			"args": [
+				"-m",
+				"unittest",
+				"discover",
+				"-s",
+				"tests",
+				"-p",
+				"allocation.py",
+				"-v"
+			],
+			"isBackground": false,
+			"group": "test"
+		}
+	]
+}
