@@ -2,7 +2,7 @@
 Domain type definitions for production allocation.
 """
 from __future__ import annotations
-
+from datetime import datetime
 from typing import List, TypedDict, NotRequired
 
 
@@ -18,10 +18,9 @@ class Item(TypedDict):
     model: str
     submodel: str
     quantity: int
-    dueDate: NotRequired[str]
 
 
 class Order(TypedDict):
     order: str
-    dueDate: str  # yyyy-MM-dd
+    dueDate: str # yyyy-MM-dd
     items: List[Item]

@@ -40,7 +40,7 @@ def _plant(pid: int, capacity: int, allowed: List[str]) -> Plant:
     }
 
 
-def _item(model: str, submodel: str, qty: int, model_family: str = "F1", due_date: str = "") -> Item:
+def _item(model: str, submodel: str, qty: int, model_family: str = "F1") -> Item:
     """Build an Item dict with required fields.
 
     Args:
@@ -59,12 +59,10 @@ def _item(model: str, submodel: str, qty: int, model_family: str = "F1", due_dat
         "submodel": submodel,
         "quantity": qty,
     }
-    if due_date:
-        item_dict["dueDate"] = due_date
     return item_dict
 
 
-def _order(order_id: str, items: List[Item], due_date: str = "2025-01-01") -> Order:
+def _order(order_id: str, items: List[Item], due_date: str) -> Order:
     """Build an Order dict with required fields.
 
     Args:
@@ -88,7 +86,7 @@ class TestAllocate(unittest.TestCase):
             _plant(2, 100, ["M1"]),
         ]
         orders = [
-            _order("O1", [_item("M1", "S1", 10)]),
+            _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
 
@@ -107,7 +105,7 @@ class TestAllocate(unittest.TestCase):
             _plant(1, 100, ["M2"]),
         ]
         orders = [
-            _order("O1", [_item("M1", "S1", 5)]),
+            _order("O1", [_item("M1", "S1", 5)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
 
@@ -124,7 +122,7 @@ class TestAllocate(unittest.TestCase):
             _plant(1, 100, ["M1"]),
         ]
         orders = [
-            _order("O1", [_item("M1", "S1", 0)]),
+            _order("O1", [_item("M1", "S1", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
 
@@ -139,8 +137,8 @@ class TestAllocate(unittest.TestCase):
             _plant(2, 100, ["M2", "M3"]),
         ]
         orders = [
-            _order("O1", [_item("M1", "S1", 4), _item("M2", "S2", 6)]),
-            _order("O2", [_item("M2", "S3", 5), _item("M3", "S4", 3)]),
+            _order("O1", [_item("M1", "S1", 4), _item("M2", "S2", 6)], datetime.now().strftime("%Y-%m-%d")),
+            _order("O2", [_item("M2", "S3", 5), _item("M3", "S4", 3)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
 
@@ -159,8 +157,8 @@ class TestAllocate(unittest.TestCase):
             _plant(2, 70, ["M2"]),
         ]
         orders = [
-            _order("O1", [_item("M1", "S1", 5)]),
-            _order("O2", [_item("M2", "S2", 8)]),
+            _order("O1", [_item("M1", "S1", 5)], datetime.now().strftime("%Y-%m-%d")),
+            _order("O2", [_item("M2", "S2", 8)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
 
@@ -186,7 +184,7 @@ class TestAllocate(unittest.TestCase):
                 _item("M1", "S1", 4),
                 _item("M1", "S2", 2),
                 _item("M1", "S3", 2),
-            ]),
+            ], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
 
@@ -207,7 +205,7 @@ class TestAllocate(unittest.TestCase):
             _plant(2, 3, ["M1"]),
         ]
         orders = [
-            _order("O1", [_item("M1", "S1", 10)]),
+            _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
 
@@ -228,11 +226,9 @@ class TestAllocate(unittest.TestCase):
         future_far = (self.current_date + timedelta(days=9)).strftime("%Y-%m-%d")
         
         orders = [
-            _order("O1", [
-                _item("M1", "S1", 5, due_date=past_due),    # 11 days overdue
-                _item("M1", "S2", 5, due_date=future_near), # 4 days in future  
-                _item("M1", "S3", 5, due_date=future_far),  # 9 days in future
-            ]),
+            _order("O1", [_item("M1", "S1", 5)], past_due),    # 11 days overdue
+            _order("O2", [_item("M1", "S2", 5)], future_near), # 4 days in future
+            _order("O3", [_item("M1", "S3", 5)], future_far),  # 9 days in future
         ]
         res = allocate(plants, orders, self.current_date)
         
@@ -255,11 +251,9 @@ class TestAllocate(unittest.TestCase):
         overdue_3 = (self.current_date - timedelta(days=3)).strftime("%Y-%m-%d")
         
         orders = [
-            _order("O1", [
-                _item("M1", "S1", 5, due_date=overdue_6),  # 6 days overdue
-                _item("M1", "S2", 5, due_date=overdue_11), # 11 days overdue (higher priority)
-                _item("M1", "S3", 5, due_date=overdue_3),  # 3 days overdue
-            ]),
+            _order("O1", [_item("M1", "S1", 5)],overdue_6),  # 6 days overdue
+            _order("O2", [_item("M1", "S2", 5)], overdue_11), # 11 days overdue (higher priority)
+            _order("O3", [_item("M1", "S3", 5)], overdue_3),  # 3 days overdue
         ]
         res = allocate(plants, orders, self.current_date)
         
@@ -279,11 +273,9 @@ class TestAllocate(unittest.TestCase):
         future_15 = (self.current_date + timedelta(days=15)).strftime("%Y-%m-%d")
         
         orders = [
-            _order("O1", [
-                _item("M1", "S1", 5, due_date=future_9),  # 9 days away
-                _item("M1", "S2", 5, due_date=future_4),  # 4 days away (higher priority)
-                _item("M1", "S3", 5, due_date=future_15), # 15 days away
-            ]),
+            _order("O1", [_item("M1", "S1", 5)],future_9),  # 9 days away
+            _order("O2", [_item("M1", "S2", 5)],future_4),  # 4 days away (higher priority)
+            _order("O3", [_item("M1", "S3", 5)],future_15), # 15 days away
         ]
         res = allocate(plants, orders, self.current_date)
         
@@ -293,25 +285,24 @@ class TestAllocate(unittest.TestCase):
         self.assertEqual(allocated_item["submodel"], "S2")  # Closest due date
         self.assertEqual(allocated_item["allocated_qty"], 5)
 
-    def test_due_date_priority_missing_dates_default(self) -> None:
-        """Items without due dates should get default priority (lower than dated items)."""
+    def test_due_date_priority_near_vs_far_future(self) -> None:
+        """Near future items should get higher priority than far future items."""
         plants = [
             _plant(1, 5, ["M1"]),  # Only capacity for one item
         ]
-        future_4 = (self.current_date + timedelta(days=4)).strftime("%Y-%m-%d")
+        future_near = (self.current_date + timedelta(days=4)).strftime("%Y-%m-%d")
+        future_far = (self.current_date + timedelta(days=20)).strftime("%Y-%m-%d")
         
         orders = [
-            _order("O1", [
-                _item("M1", "S1", 5),  # No due date (default priority)
-                _item("M1", "S2", 5, due_date=future_4),  # Future due (higher priority)
-            ]),
+            _order("O1", [_item("M1", "S1", 5)], future_far),  # 20 days away (lower priority)
+            _order("O2", [_item("M1", "S2", 5)], future_near),  # 4 days away (higher priority)
         ]
         res = allocate(plants, orders, self.current_date)
         
-        # Future due item should be allocated over no-date item
+        # Near future item should be allocated over far future item
         self.assertEqual(len(res["allocations"]), 1)
         allocated_item = res["allocations"][0]
-        self.assertEqual(allocated_item["submodel"], "S2")  # Has due date
+        self.assertEqual(allocated_item["submodel"], "S2")  # Near future date
         self.assertEqual(allocated_item["allocated_qty"], 5)
 
     def test_due_date_priority_with_quantity_weight(self) -> None:
@@ -323,10 +314,8 @@ class TestAllocate(unittest.TestCase):
         future_4 = (self.current_date + timedelta(days=4)).strftime("%Y-%m-%d")
         
         orders = [
-            _order("O1", [
-                _item("M1", "S1", 10, due_date=overdue_11), # 11 days overdue, qty 10
-                _item("M1", "S2", 5, due_date=future_4),    # 4 days future, qty 5
-            ]),
+            _order("O1", [_item("M1", "S1", 10)], overdue_11), # 11 days overdue, qty 10
+            _order("O2", [_item("M1", "S2", 5)], future_4),    # 4 days future, qty 5
         ]
         res = allocate(plants, orders, self.current_date)
         

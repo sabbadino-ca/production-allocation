@@ -204,7 +204,8 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
       base_weight = qty
       
       # Due date priority weight (earlier dates get higher priority)
-      due_date_str = it.get("dueDate", "")
+      # Use order-level dueDate since items no longer have individual due dates
+      due_date_str = orders[order_idx].get("dueDate", "")
       if due_date_str:
         try:
           due_date = datetime.fromisoformat(due_date_str)
