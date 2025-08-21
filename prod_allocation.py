@@ -73,6 +73,48 @@ class UnallocatedRow(TypedDict):
   reason: Literal["insufficient_capacity"]
 
 
+def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
+  """
+  Validate input data for plants and orders.
+
+  Args:
+    plants: List of Plant dictionaries to validate.
+    orders: List of Order dictionaries to validate.
+
+  Raises:
+    ValueError: If data does not meet schema expectations.
+  """
+  # Validate plants data
+  if not isinstance(plants, list):
+    raise ValueError("Plants data must be a list.")
+  
+  for plant in plants:
+    if not all(k in plant for k in ("plantid", "plantfamily", "capacity", "allowedModels")):
+      raise ValueError(f"Missing required plant fields in: {plant}")
+    if not isinstance(plant["allowedModels"], list):
+      raise ValueError(f"allowedModels must be a list in: {plant}")
+    if len(plant["allowedModels"]) < 1:
+      raise ValueError(f"allowedModels must contain at least one item in: {plant}")
+
+  # Validate orders data  
+  if not isinstance(orders, list):
+    raise ValueError("Orders data must be a list.")
+    
+  for order in orders:
+    if not all(k in order for k in ("order", "dueDate", "items")):
+      raise ValueError(f"Missing required order fields in: {order}")
+    # Check dueDate format
+    try:
+      datetime.strptime(order["dueDate"], "%Y-%m-%d")
+    except Exception:
+      raise ValueError(f"dueDate must be in yyyy-MM-dd format in: {order}")
+    if not isinstance(order["items"], list):
+      raise ValueError(f"Items must be a list in: {order}")
+    for item in order["items"]:
+      if not all(k in item for k in ("modelFamily", "model", "submodel", "quantity")):
+        raise ValueError(f"Missing required item fields in: {item}")
+
+
 def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -> AllocateResult:
   """
   Build an optimization CP-SAT model (always feasible) with:
@@ -112,6 +154,9 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
       https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpModel.Maximize
       https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpSolver.Solve
   """
+  # Validate input data first
+  validate_input_data(plants, orders)
+  
   # Aggregate quick stats
   total_capacity = sum(int(p.get("capacity", 0)) for p in plants)
   total_demand = 0

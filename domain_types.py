@@ -3,7 +3,7 @@ Domain type definitions for production allocation.
 """
 from __future__ import annotations
 
-from typing import List, TypedDict
+from typing import List, TypedDict, NotRequired
 
 
 class Plant(TypedDict):
@@ -18,6 +18,7 @@ class Item(TypedDict):
     model: str
     submodel: str
     quantity: int
+    dueDate: NotRequired[str]
 
 
 class Order(TypedDict):

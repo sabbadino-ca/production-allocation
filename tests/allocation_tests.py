@@ -14,7 +14,7 @@ Uses Python's built-in unittest to keep dependencies minimal.
 from __future__ import annotations
 
 import unittest
-from typing import List
+from typing import List, cast
 from datetime import datetime, timedelta
 
 from prod_allocation import allocate
@@ -53,7 +53,7 @@ def _item(model: str, submodel: str, qty: int, model_family: str = "F1", due_dat
     Returns:
         An Item-typed dict suitable for allocate().
     """
-    item_dict = {
+    item_dict: Item = {
         "modelFamily": model_family,
         "model": model,
         "submodel": submodel,
