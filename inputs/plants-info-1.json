@@ -1,0 +1,5 @@
+[
+{ "plantid": 1 , "plantfamily" : "family1" , "capacity": 100 },
+{ "plantid": 2 , "plantfamily" : "family1" , "capacity": 50 },
+{ "plantid": 3 , "plantfamily" : "family2" , "capacity": 100 }
+]
