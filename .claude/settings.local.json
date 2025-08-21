@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(.venv/Scripts/python.exe -m tests.allocation_tests:*)",
+      "Bash(chmod:*)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/ -v)",
+      "Bash(.venv/Scripts/python.exe:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

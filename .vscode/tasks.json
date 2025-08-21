@@ -1,6 +1,15 @@
 {
 	"version": "2.0.0",
 	"tasks": [
-		
+		{
+			"label": "Run allocate unit tests",
+			"type": "shell",
+			"command": "D:/repos/personal-devops-ca/production-allocation/.venv/Scripts/python.exe -m unittest -v tests/allocation_tests.py",
+			"isBackground": false,
+			"problemMatcher": [
+				"$unittest"
+			],
+			"group": "test"
+		}
 	]
 }

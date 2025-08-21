@@ -1,8 +1,16 @@
 """
 Production allocation optimization module using Google OR-Tools CP-SAT.
 
-Implements the first hard constraint: items can only be produced on plants that
-are allowed to produce their model (allowedModels).
+Hard constraints currently enforced:
+- Compatibility: items can only be produced on plants that are allowed to
+  produce their model (allowedModels).
+- Plant capacity: the total quantity assigned to each plant cannot exceed the
+  plant's capacity.
+
+Objective (multi-criteria):
+- Maximize total allocated quantity weighted by due date priority.
+- Past due items get highest priority (10000+ weight).
+- Future items prioritized by proximity to due date.
 
 Docs: CpModel.NewIntVar, CpModel.Add
 - https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpModel.NewIntVar
@@ -13,6 +21,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple, TypedDict, Literal
 from domain_types import Plant, Order, Item
 from ortools.sat.python import cp_model
+from datetime import datetime
 
 class AllocationRow(TypedDict):
   """One non-zero allocation row in the result."""
@@ -51,18 +60,34 @@ class AllocateResult(TypedDict):
   summary: Summary
   allocations: List[AllocationRow]
   skipped: List[SkippedRow]
+  unallocated: List["UnallocatedRow"]
 
 
-def allocate(plants: List[Plant], orders: List[Order]) -> AllocateResult:
+class UnallocatedRow(TypedDict):
+  """One item that could not be placed due to capacity or packing limits."""
+  order: str
+  order_index: int
+  model: str
+  submodel: str
+  requested_qty: int
+  reason: Literal["insufficient_capacity"]
+
+
+def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -> AllocateResult:
   """
-  Build a feasibility CP-SAT model that enforces the allowedModels constraint.
+  Build an optimization CP-SAT model (always feasible) with:
+  - Compatibility and plant capacity constraints.
+  - All-or-nothing item placement (no splitting across plants).
+  - Objective: maximize total allocated quantity weighted by due date priority,
+    allowing items to remain unallocated when capacity is insufficient.
 
   Behavior
   - Creates integer decision variables only for (plant, item) pairs where the
     plant supports the item's model (allowedModels).
-  - For each item that has at least one compatible plant, adds a demand
-    satisfaction constraint: sum over compatible plants equals requested
-    quantity.
+  - For each compatible item, adds a binary assignment to at most one plant
+    (no split). If assigned, the full item quantity is placed at that plant.
+  - Adds a plant capacity constraint: for each plant, the sum of assigned
+    quantities cannot exceed its capacity.
   - For items with no compatible plant, skips them (does not add variables nor
     constraints) and records them under the returned "skipped" property.
 
@@ -70,7 +95,8 @@ def allocate(plants: List[Plant], orders: List[Order]) -> AllocateResult:
     plants: List of Plant dictionaries (must include 'plantid', 'capacity',
       and 'allowedModels').
     orders: List of Order dictionaries (each containing an 'items' list of
-      Item dictionaries with 'model', 'submodel', and 'quantity').
+      Item dictionaries with 'model', 'submodel', 'modelFamily', and 'quantity').
+    current_date: Current date for due date priority calculations.
 
   Returns:
     AllocateResult: Typed mapping containing
@@ -79,9 +105,11 @@ def allocate(plants: List[Plant], orders: List[Order]) -> AllocateResult:
       - skipped: Items not modeled due to no compatible plant with reason.
 
   Notes:
-    - This model is feasibility-only (no objective). See CpModel.Add and
-      CpSolver.Solve in OR-Tools docs for details:
+    - This model includes an objective (maximize allocated quantity), so it will
+      not return INFEASIBLE due to capacity: items that don't fit simply remain
+      unallocated. See CpModel.Add and CpModel.Maximize/CpSolver.Solve:
       https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpModel.Add
+      https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpModel.Maximize
       https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpSolver.Solve
   """
   # Aggregate quick stats
@@ -104,8 +132,10 @@ def allocate(plants: List[Plant], orders: List[Order]) -> AllocateResult:
   # CP-SAT model
   model = cp_model.CpModel()
 
-  # Decision variables x[p,k] only for allowed (plant p, item k)
-  x: Dict[Tuple[int, int], cp_model.IntVar] = {}
+  # Binary assignment variables assign[p,k] only for allowed (plant p, item k)
+  assign: Dict[Tuple[int, int], cp_model.IntVar] = {}
+  # placed[k] indicates whether item k is fully placed on exactly one plant
+  placed: Dict[int, cp_model.IntVar] = {}
 
   def plant_can_make(plant: Plant, item: Item) -> bool:
     return item["model"] in plant["allowedModels"]
@@ -133,21 +163,76 @@ def allocate(plants: List[Plant], orders: List[Order]) -> AllocateResult:
         "reason": "no_compatible_plant",
       })
       continue
+    # placed var per item
+    placed[k_idx] = model.NewBoolVar(f"placed_k{k_idx}")
+    # assignment boolean per compatible plant
     for p_idx in cands:
-      upper = qty
-      x[p_idx, k_idx] = model.NewIntVar(0, upper, f"x_p{plants[p_idx]['plantid']}_k{k_idx}")
+      assign[p_idx, k_idx] = model.NewBoolVar(f"assign_p{plants[p_idx]['plantid']}_k{k_idx}")
 
-  # Demand satisfaction for each item using only allowed vars
+  # All-or-nothing assignment: each item assigned to at most one plant; if
+  # assigned, the full quantity is placed. Sum of assigns equals placed.
   for k_idx, (_oi, it) in enumerate(items):
-    qty = int(it["quantity"])
+    qty = int(it.get("quantity", 0))
     cands = compatible_plants[k_idx]
-    if not cands:
-      # Skipped (or zero-quantity), do not add constraints
+    if not cands or qty == 0:
+      # Skipped or zero-quantity: no assignment constraints
       continue
-    terms = [x[p_idx, k_idx] for p_idx in cands]
-    model.Add(sum(terms) == qty)
+    assign_vars = [assign[p_idx, k_idx] for p_idx in cands]
+    # placed[k] exists because we created it above for items with cands
+    model.Add(sum(assign_vars) == placed[k_idx])
 
-  # Solve (no objective: feasibility only)
+  # Plant capacity constraints: sum of item quantities assigned to the plant
+  # cannot exceed plant capacity
+  for p_idx, p in enumerate(plants):
+    cap = int(p.get("capacity", 0))
+    # For each item assigned to this plant, it contributes its full quantity
+    terms = []
+    for k_idx, (_oi, it) in enumerate(items):
+      qty = int(it.get("quantity", 0))
+      if qty <= 0:
+        continue
+      if (p_idx, k_idx) in assign:
+        # Linearize weight: qty * assign[p,k]
+        terms.append(qty * assign[p_idx, k_idx])
+    if terms:
+      model.Add(sum(terms) <= cap)
+
+
+  # Multi-objective: maximize quantity + prioritize earlier due dates
+  obj_terms = []
+  for k_idx, (order_idx, it) in enumerate(items):
+    qty = int(it.get("quantity", 0))
+    if k_idx in placed and qty > 0:
+      # Base quantity term
+      base_weight = qty
+      
+      # Due date priority weight (earlier dates get higher priority)
+      due_date_str = it.get("dueDate", "")
+      if due_date_str:
+        try:
+          due_date = datetime.fromisoformat(due_date_str)
+          days_until_due = (due_date - current_date).days
+          
+          if days_until_due < 0:
+            # Past due: highest priority (exponentially increasing with overdue days)
+            due_date_weight = 10000 + abs(days_until_due) * 100
+          else:
+            # Future due: higher weight for items due sooner
+            due_date_weight = max(1, 1000 - days_until_due)
+        except:
+          due_date_weight = 1
+      else:
+        due_date_weight = 1
+        
+      # Combined objective coefficient
+      total_weight = base_weight * due_date_weight
+      obj_terms.append(total_weight * placed[k_idx])
+
+
+  if obj_terms:
+    model.Maximize(sum(obj_terms))
+
+  # Solve
   solver = cp_model.CpSolver()
   status = solver.Solve(model)
 
@@ -163,17 +248,38 @@ def allocate(plants: List[Plant], orders: List[Order]) -> AllocateResult:
     return "UNKNOWN"
 
   allocations: List[AllocationRow] = []
+  unallocated: List[UnallocatedRow] = []
   if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-    for (p_idx, k_idx), var in x.items():
-      val = solver.Value(var)
-      if val > 0:
-        order_idx, item = items[k_idx]
-        allocations.append({
-          "plantid": plants[p_idx]["plantid"],
+    # Extract placements
+    for k_idx, (order_idx, item) in enumerate(items):
+      qty = int(item.get("quantity", 0))
+      cands = compatible_plants[k_idx]
+      if not cands or qty == 0:
+        continue
+      if k_idx in placed and solver.Value(placed[k_idx]) == 1:
+        # Find the plant assigned
+        assigned_p = None
+        for p_idx in cands:
+          if solver.Value(assign[p_idx, k_idx]) == 1:
+            assigned_p = p_idx
+            break
+        if assigned_p is not None:
+          allocations.append({
+            "plantid": plants[assigned_p]["plantid"],
+            "order": orders[order_idx]["order"],
+            "model": item["model"],
+            "submodel": item["submodel"],
+            "allocated_qty": qty,
+          })
+      else:
+        # Not placed due to capacity/packing
+        unallocated.append({
           "order": orders[order_idx]["order"],
+          "order_index": order_idx,
           "model": item["model"],
           "submodel": item["submodel"],
-          "allocated_qty": int(val),
+          "requested_qty": qty,
+          "reason": "insufficient_capacity",
         })
 
   return {
@@ -190,4 +296,5 @@ def allocate(plants: List[Plant], orders: List[Order]) -> AllocateResult:
     },
     "allocations": allocations,
     "skipped": skipped,
+  "unallocated": unallocated,
   }
