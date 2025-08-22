@@ -118,16 +118,18 @@ def validate_settings_payload(data: dict) -> tuple[float, float]:
   """
   if not isinstance(data, dict):
     raise ValueError("Settings file must contain a JSON object.")
-  missing = [k for k in ("w_quantity", "w_due") if k not in data]
+  # Required weights now include w_compactness.
+  missing = [k for k in ("w_quantity", "w_due", "w_compactness") if k not in data]
   if missing:
     raise ValueError(f"Settings file missing keys: {missing}")
   try:
     w_quantity = float(data["w_quantity"])
     w_due = float(data["w_due"])
+    w_compactness = float(data["w_compactness"])
   except Exception:
-    raise ValueError("w_quantity and w_due must be numeric.")
-  if w_quantity < 0 or w_due < 0:
-    raise ValueError("w_quantity and w_due must be non-negative.")
+    raise ValueError("w_quantity, w_due and w_compactness must be numeric.")
+  if w_quantity < 0 or w_due < 0 or w_compactness < 0:
+    raise ValueError("w_quantity, w_due and w_compactness must be non-negative.")
   # Optional horizon_days validation centralized here (must be >=1 if provided)
   if "horizon_days" in data:
     try:

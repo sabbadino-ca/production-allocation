@@ -51,6 +51,10 @@ class ObjectiveComponents(TypedDict):
     due_component: int
     int_w_quantity: int
     int_w_due: int
+    # Added (2025-08): model compactness reward component (optional)
+    compactness_component: int
+    int_w_compactness: int
+    single_plant_models_count: int
     scale: int
     weight_precision: int
 
@@ -164,11 +168,13 @@ class WeightsConfig(_WeightsConfigRequired, total=False):
         scale: Scaling factor for normalized components (default 1000).
         weight_precision: Integer precision multiplier for weights (default 1).
         max_time_seconds: Time limit for the CP-SAT solver wall clock (default 60).
+        w_compactness: Weight for model compactness reward (>=0, default 0 disables feature).
     """
     horizon_days: int
     scale: int
     weight_precision: int
     max_time_seconds: float
+    w_compactness: float
 
 
 class SolverParameters(TypedDict):

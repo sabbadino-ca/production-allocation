@@ -89,7 +89,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
 
         self.assertIn("summary", res)
         self.assertIn("allocations", res)
@@ -108,7 +108,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 5)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
 
         # Item should be skipped
         self.assertEqual(res["skipped"][0]["reason"], "no_compatible_plant")
@@ -125,7 +125,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         # Zero quantity with compatible plant: no allocation, not skipped, appears in zero_quantity_items
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 0)
@@ -140,8 +140,8 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        # Omit horizon_days in weights
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+    # Omit horizon_days in weights
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         self.assertIn("diagnostics", res["summary"])
         self.assertEqual(res["summary"]["diagnostics"]["horizon_days"], 30)
 
@@ -152,7 +152,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M2", "Sx", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         # Even though incompatible, zero quantity classification takes precedence; reported in zero_quantity_items
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 0)
@@ -167,7 +167,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 6)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 1)
         self.assertEqual(res["skipped"][0]["reason"], "too_large_for_any_plant")
@@ -182,7 +182,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 4), _item("M2", "S2", 6)], datetime.now().strftime("%Y-%m-%d")),
             _order("O2", [_item("M2", "S3", 5), _item("M3", "S4", 3)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
 
         # All items have at least one compatible plant, so no skipped
         self.assertEqual(res["summary"]["skipped_count"], 0)
@@ -202,7 +202,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 5)], datetime.now().strftime("%Y-%m-%d")),
             _order("O2", [_item("M2", "S2", 8)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
 
         self.assertEqual(res["summary"]["plants_count"], 2)
         self.assertEqual(res["summary"]["orders_count"], 2)
@@ -228,7 +228,7 @@ class TestAllocate(unittest.TestCase):
                 _item("M1", "S3", 2),
             ], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
 
         self.assertIn(res["summary"]["status"], {"OPTIMAL", "FEASIBLE"})
         total_alloc = sum(a["allocated_qty"] for a in res["allocations"])
@@ -250,7 +250,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         self.assertIn(res["summary"]["status"], {"OPTIMAL", "FEASIBLE"})
         # No allocation possible
         self.assertEqual(len(res["allocations"]), 0)
@@ -274,7 +274,7 @@ class TestAllocate(unittest.TestCase):
             _order("O2", [_item("M1", "S2", 5)], future_near), # 4 days in future
             _order("O3", [_item("M1", "S3", 5)], future_far),  # 9 days in future
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         
         # Only past due item should be allocated
         self.assertEqual(len(res["allocations"]), 1)
@@ -299,7 +299,7 @@ class TestAllocate(unittest.TestCase):
             _order("O2", [_item("M1", "S2", 5)], overdue_11), # 11 days overdue (higher priority)
             _order("O3", [_item("M1", "S3", 5)], overdue_3),  # 3 days overdue
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         
         # Most overdue item should be allocated
         self.assertEqual(len(res["allocations"]), 1)
@@ -321,7 +321,7 @@ class TestAllocate(unittest.TestCase):
             _order("O2", [_item("M1", "S2", 5)],future_4),  # 4 days away (higher priority)
             _order("O3", [_item("M1", "S3", 5)],future_15), # 15 days away
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         
         # Closest due date should be allocated
         self.assertEqual(len(res["allocations"]), 1)
@@ -341,7 +341,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 5)], future_far),  # 20 days away (lower priority)
             _order("O2", [_item("M1", "S2", 5)], future_near),  # 4 days away (higher priority)
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         
         # Near future item should be allocated over far future item
         self.assertEqual(len(res["allocations"]), 1)
@@ -361,7 +361,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 10)], overdue_11), # 11 days overdue, qty 10
             _order("O2", [_item("M1", "S2", 5)], future_4),    # 4 days future, qty 5
         ]
-        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
         
         # Both should be allocated since capacity allows
         self.assertEqual(len(res["allocations"]), 2)
@@ -371,6 +371,94 @@ class TestAllocate(unittest.TestCase):
         # No unallocated items
         self.assertEqual(len(res.get("unallocated", [])), 0)
 
+    def test_over_demand_returns_some_unallocated(self) -> None:
+        """When aggregate demand exceeds total capacity we should get a feasible solution with >=1 unallocated item.
 
+        We don't assert an exact count (solver may choose any maximal packing), only that not all modelable items were placed.
+        """
+        plants = [
+            _plant(1, 5, ["M1"]),
+            _plant(2, 4, ["M1"]),
+        ]  # total capacity 9
+        orders = [
+            _order("O1", [
+                _item("M1", "S1", 5),
+                _item("M1", "S2", 4),
+                _item("M1", "S3", 3),  # total demand 12 > 9
+            ], datetime.now().strftime("%Y-%m-%d")),
+        ]
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
+        self.assertIn(res["summary"]["status"], {"OPTIMAL", "FEASIBLE"})
+        total_alloc = sum(a["allocated_qty"] for a in res["allocations"])
+        self.assertLess(total_alloc, 12)
+        self.assertGreaterEqual(len(res.get("unallocated", [])), 1)
+
+    def test_compactness_objective_reward(self) -> None:
+        """Compactness weight should reward concentrating each model on a single plant.
+
+        We assert:
+          * Positive compactness_component when weight active.
+          * Each model ends up on exactly one plant (given ample capacity & symmetry).
+          * With weight disabled reward becomes 0 (distribution may still be consolidated by coincidence).
+        """
+        plants = [
+            _plant(1, 100, ["M1", "M2"]),
+            _plant(2, 100, ["M1", "M2"]),
+        ]
+        today = self.current_date.strftime("%Y-%m-%d")
+        orders = [
+            _order("O1", [_item("M1", "S1", 5), _item("M1", "S2", 7)], today),
+            _order("O2", [_item("M2", "S3", 4), _item("M2", "S4", 6)], today),
+        ]
+        res_active = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
+        obj_active = res_active["summary"]["objective_components"]
+        self.assertGreater(obj_active.get("compactness_component", 0), 0)
+        model_to_plants_active = {}
+        for a in res_active["allocations"]:
+            model_to_plants_active.setdefault(a["model"], set()).add(a["plantid"])
+        for m, plant_set in model_to_plants_active.items():
+            self.assertEqual(len(plant_set), 1, f"Model {m} split across {plant_set}")
+        # Disabled weight run
+        res_inert = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":0.0})
+        obj_inert = res_inert["summary"]["objective_components"]
+        self.assertEqual(obj_inert.get("compactness_component", -1), 0)
+
+    def test_compactness_distribution_consolidates_models(self) -> None:
+        """With compactness enabled, each model's items should end up on exactly one plant when
+        there exists a tie on other objective components (quantity, due).
+
+        Construction:
+          * Two models M1, M2; each has two items whose quantities sum to 11.
+          * Two plants each capacity 11 and can produce both models.
+          * All due dates identical (neutralize urgency component) and quantities already maximal.
+          * Without compactness there are many optimal packings (mixing items across plants or
+            consolidating each model to a plant). With compactness active, consolidating each
+            model entirely on one plant yields an extra reward (scale per model), so the solver
+            should pick a layout where every model uses exactly one plant.
+
+        We validate by reconstructing model->set(plantid) from allocations and asserting all sets
+        have size 1.
+        """
+        plants = [
+            _plant(1, 11, ["M1", "M2"]),
+            _plant(2, 11, ["M1", "M2"]),
+        ]
+        today = self.current_date.strftime("%Y-%m-%d")
+        # Each model sums to 11 exactly (fills one plant perfectly)
+        orders = [
+            _order("O1", [_item("M1", "S1", 6), _item("M1", "S2", 5)], today),
+            _order("O2", [_item("M2", "S3", 5), _item("M2", "S4", 6)], today),
+        ]
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0, "w_compactness":2.0})
+        allocs = res["allocations"]
+        self.assertEqual(len(allocs), 4)
+        model_to_plants = {}
+        for a in allocs:
+            model_to_plants.setdefault(a["model"], set()).add(a["plantid"])
+        for model, plant_set in model_to_plants.items():
+            self.assertEqual(len(plant_set), 1, f"Model {model} spread across multiple plants: {plant_set}")
+        obj = res["summary"]["objective_components"]
+        self.assertGreater(obj.get("compactness_component", 0), 0)
+# Ensure no stray global assertions remain below (cleanup)
 if __name__ == "__main__":
     unittest.main()

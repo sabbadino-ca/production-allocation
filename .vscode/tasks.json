@@ -4,7 +4,7 @@
 		{
 			"label": "Run allocate unit tests",
 			"type": "shell",
-			"command": "D:/repos/personal-devops-ca/production-allocation/.venv/Scripts/python.exe -m unittest -v tests/allocation_tests.py",
+			"command": "D:/repos/personal-devops-ca/production-allocation/.venv/Scripts/python.exe -m unittest -v tests/*.py",
 			"isBackground": false,
 			"problemMatcher": [
 				"$unittest"

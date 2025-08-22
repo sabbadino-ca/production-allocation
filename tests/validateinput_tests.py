@@ -156,7 +156,7 @@ class TestDataLoader(unittest.TestCase):
             }
         ]
         with self.assertRaises(ValueError) as context:
-            settings: WeightsConfig = {"w_quantity": 5.0, "w_due": 1.0}
+            settings: WeightsConfig = {"w_quantity": 5.0, "w_due": 1.0, "w_compactness": 2.0}
             validate_input_data(plants, orders, settings)
 
         self.assertIn("Item quantity must be >= 0", str(context.exception))
@@ -173,7 +173,7 @@ class TestDataLoader(unittest.TestCase):
         orders: List[Order] = [
             {"order": "O1", "dueDate": "2025-01-01", "items": items},
         ]
-        settings: WeightsConfig = {"w_quantity": 5.0, "w_due": 1.0, "horizon_days": 0}
+        settings: WeightsConfig = {"w_quantity": 5.0, "w_due": 1.0, "w_compactness":2.0, "horizon_days": 0}
         with self.assertRaises(ValueError) as ctx:
             validate_input_data(plants, orders, settings)
         self.assertIn("horizon_days", str(ctx.exception))

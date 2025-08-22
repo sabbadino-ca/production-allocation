@@ -58,8 +58,6 @@ Key configuration fields:
   than this horizon contribute zero future urgency (pre-normalization).
 * ``scale`` (int, default 1000): Multiplies normalized components before
   converting to integers. Larger improves resolution but increases objective
-  coefficients.
-* ``weight_precision`` (int, default 1): Multiplies raw weights before integer
   rounding (use to preserve fractional weight distinctions).
 
 Coefficient Safety: Keep the product
@@ -256,6 +254,9 @@ def allocate(
   # Extract weights with defaults (0.0 forces explicit user specification)
   w_quantity = float(weights.get("w_quantity", 0.0))
   w_due = float(weights.get("w_due", 0.0))
+  # Optional additional soft objective weight: reward model compactness (same model on a single plant)
+  # If absent or 0.0 the feature is inert.
+  w_compactness = float(weights.get("w_compactness", 0.0))
   
   horizon_days = int(weights.get("horizon_days", DEFAULT_HORIZON_DAYS))
   scale = int(weights.get("scale", 1000))
@@ -435,23 +436,107 @@ def allocate(
     qty_component_terms.append(c_qty * placed[k_idx])
     due_component_terms.append(c_due * placed[k_idx])
 
+  # --- MODEL COMPACTNESS COMPONENT (optional, graded) ---
+  # Updated logic: reward decreases as a model uses more plants.
+  #   * 1 plant  (if feasible) -> reward ≈ scale (maximum)
+  #   * 2 plants -> intermediate reward > 0
+  #   * All candidate plants -> reward 0
+  # Construction per model m with Pm candidate plants (Pm >= 1):
+  #   model_used_p_m (Bool) indicates at least one item of model m produced at plant p.
+  #   plants_used_m = Σ_p model_used_p_m.
+  #   any_used_m (Bool) gates reward to 0 if model not produced anywhere.
+  #   single_plant_m (Bool) retained for diagnostics (count how many models consolidated on exactly 1 plant).
+  # Reward expression (Pm > 1):
+  #     base = scale * any_used_m
+  #     penalty_per_extra = floor(scale / (Pm - 1))  (ensures non‑negative reward when all Pm plants used)
+  #     reward_m = base - penalty_per_extra * (plants_used_m - any_used_m)
+  #   So plants_used=1 => reward = scale; plants_used=Pm => reward ≈ 0.
+  # For Pm == 1, reward = scale * any_used_m (equivalent to binary case).
+  # NOTE: We DO NOT currently require all items of a model to be allocated; partial but consolidated allocation
+  #       still earns the corresponding reward. Tightening (gating by an all_items_placed_m Bool) can be added later.
+  # Rationale: Linear, parameter‑free (other than scale) grading with bounded magnitude, avoiding fragile division
+  #            of linear expressions by non‑unity constants.
+  # Only activated if w_compactness > 0.
+  compactness_component_terms: List[cp_model.LinearExpr] = []
+  single_plant_model_vars: List[cp_model.IntVar] = []  # kept for backward compatibility (may be 0 even if consolidated)
+  plants_used_model_vars: List[cp_model.IntVar] = []    # authoritative list for counting models with exactly one plant
+  if w_compactness > 0:
+    # Map model -> item indices (only modeled items)
+    model_to_item_indices: Dict[str, List[int]] = {}
+    for k_idx, (_oi, it) in enumerate(items):
+      if k_idx not in placed:
+        continue
+      mname = str(it.get("model"))
+      model_to_item_indices.setdefault(mname, []).append(k_idx)
+
+    for midx, (mname, k_indices) in enumerate(model_to_item_indices.items()):
+      # Candidate plants for this model are those with at least one assign var among its items
+      candidate_plants: List[int] = []
+      for p_idx, _p in enumerate(plants):
+        for k in k_indices:
+          if (p_idx, k) in assign:
+            candidate_plants.append(p_idx)
+            break
+      if not candidate_plants:
+        continue  # No feasible production opportunity present
+      Pm = len(candidate_plants)
+      # model_used vars
+      model_used_vars: List[cp_model.IntVar] = []
+      model_used_lookup: Dict[int, cp_model.IntVar] = {}
+      for p_idx in candidate_plants:
+        v = model.NewBoolVar(f"model_used_m{midx}_p{plants[p_idx]['plantid']}")
+        model_used_vars.append(v)
+        model_used_lookup[p_idx] = v
+      # Linking: assign[p,k] <= model_used[p]
+      for p_idx in candidate_plants:
+        rel_items = [k for k in k_indices if (p_idx, k) in assign]
+        if not rel_items:
+            continue
+        for k in rel_items:
+          model.Add(assign[p_idx, k] <= model_used_lookup[p_idx])
+        # Tightening: model_used <= sum assign
+        model.Add(model_used_lookup[p_idx] <= sum(assign[p_idx, k] for k in rel_items))
+      # plants_used int var and single_plant bool
+      plants_used = model.NewIntVar(0, Pm, f"plants_used_m{midx}")
+      model.Add(plants_used == sum(model_used_vars))
+      single_plant = model.NewBoolVar(f"single_plant_m{midx}")
+      model.Add(plants_used >= single_plant)
+      model.Add(plants_used <= 1 + (Pm - 1) * (1 - single_plant))
+      # any_used bool (plants_used >=1)
+      any_used = model.NewBoolVar(f"any_used_m{midx}")
+      # plants_used >= any_used and plants_used <= Pm * any_used
+      model.Add(plants_used >= any_used)
+      model.Add(plants_used <= Pm * any_used)
+      # Reward term (graded)
+      if Pm == 1:
+        # Only one possible plant – treat as binary reward when used
+        compactness_component_terms.append(scale * any_used)
+      else:
+        penalty_per_extra = max(1, scale // (Pm - 1))  # floor ensures non-negative for full spread
+        # reward = scale*any_used - penalty_per_extra * (plants_used - any_used)
+        compactness_component_terms.append(scale * any_used - penalty_per_extra * (plants_used - any_used))
+  # (Bug fix) Removed stray appends that previously executed outside the per-model loop
+
   # Convert weights to integers with desired precision.
   # NOTE: Keep (weight_precision * scale * max_component_value) within a safe bound.
   int_w_quantity = int(round(w_quantity * weight_precision))
   int_w_due = int(round(w_due * weight_precision))
+  int_w_compactness = int(round(w_compactness * weight_precision)) if w_compactness > 0 else 0
   if int_w_quantity <= 0 or int_w_due <= 0:
     raise ValueError("Integer-converted weights must be > 0; check w_quantity / w_due and weight_precision")
 
   # Build component sums (LinearExpr). If empty, skip objective.
   sum_qty_expr = sum(qty_component_terms) if qty_component_terms else None
   sum_due_expr = sum(due_component_terms) if due_component_terms else None
-  if sum_qty_expr is not None or sum_due_expr is not None:
-    # Treat missing component as 0.
+  sum_compact_expr = sum(compactness_component_terms) if compactness_component_terms else None
+  if sum_qty_expr is not None or sum_due_expr is not None or sum_compact_expr is not None:
     expr = 0
     if sum_qty_expr is not None and int_w_quantity > 0:
       expr += int_w_quantity * sum_qty_expr
     if sum_due_expr is not None and int_w_due > 0:
       expr += int_w_due * sum_due_expr
+    if sum_compact_expr is not None and int_w_compactness > 0:
+      expr += int_w_compactness * sum_compact_expr
     model.Maximize(expr)
 
   # Solve
@@ -468,6 +553,8 @@ def allocate(
   # Default component values (evaluated post-solve)
   component_qty_value = 0
   component_due_value = 0
+  component_compactness_value = 0
+  single_plant_models_count = 0
   if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
     # Extract placements
     for k_idx, (order_idx, item) in enumerate(items):
@@ -508,6 +595,11 @@ def allocate(
         component_qty_value = solver.Value(sum_qty_expr)
       if 'sum_due_expr' in locals() and sum_due_expr is not None:
         component_due_value = solver.Value(sum_due_expr)
+      if 'sum_compact_expr' in locals() and sum_compact_expr is not None:
+        component_compactness_value = solver.Value(sum_compact_expr)
+      # Count models whose plants_used == 1 (more robust than relying on single_plant var that is no longer rewarded)
+      if 'plants_used_model_vars' in locals() and plants_used_model_vars:
+        single_plant_models_count = sum(1 for v in plants_used_model_vars if solver.Value(v) == 1)
     except Exception:
       pass
 
@@ -567,8 +659,11 @@ def allocate(
       "objective_components": {
         "quantity_component": component_qty_value,
         "due_component": component_due_value,
-        "int_w_quantity": int_w_quantity,
-        "int_w_due": int_w_due,
+  "int_w_quantity": int_w_quantity,
+  "int_w_due": int_w_due,
+  "compactness_component": component_compactness_value,
+  "int_w_compactness": int_w_compactness,
+  "single_plant_models_count": single_plant_models_count,
         "scale": scale,
         "weight_precision": weight_precision,
       },

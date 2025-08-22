@@ -26,8 +26,18 @@ def main():
     weights: WeightsConfig = {
         "w_quantity": float(settings.get("w_quantity", 5.0)),
         "w_due": float(settings.get("w_due", 1.0)),
+        "w_compactness": float(settings.get("w_compactness", 2.0)),
     }
-    print(f"Loaded weights -> w_quantity={weights['w_quantity']}, w_due={weights['w_due']}")
+    # Optional pass-through settings if provided
+    if "horizon_days" in settings:
+        weights["horizon_days"] = int(settings["horizon_days"])
+    if "scale" in settings:
+        weights["scale"] = int(settings["scale"])
+    if "weight_precision" in settings:
+        weights["weight_precision"] = int(settings["weight_precision"])
+    if "max_time_seconds" in settings:
+        weights["max_time_seconds"] = float(settings["max_time_seconds"])
+    print(f"Loaded weights -> w_quantity={weights['w_quantity']}, w_due={weights['w_due']}, w_compactness={weights['w_compactness']}")
     result = allocate(plants, orders, current_date, weights)
     
     # Print summary
@@ -48,8 +58,10 @@ def main():
     obj_comp = summary.get('objective_components', {}) or {}
     if obj_comp:
         print("\nObjective Components (scaled):")
-        print(f"  Quantity Component: {obj_comp.get('quantity_component', 0)} (int_w_quantity={obj_comp.get('int_w_quantity', 0)})")
-        print(f"  Due Component:      {obj_comp.get('due_component', 0)} (int_w_due={obj_comp.get('int_w_due', 0)})")
+        print(f"  Quantity Component:     {obj_comp.get('quantity_component', 0)} (int_w_quantity={obj_comp.get('int_w_quantity', 0)})")
+        print(f"  Due Component:          {obj_comp.get('due_component', 0)} (int_w_due={obj_comp.get('int_w_due', 0)})")
+        if 'compactness_component' in obj_comp:
+            print(f"  Compactness Component:  {obj_comp.get('compactness_component', 0)} (int_w_compactness={obj_comp.get('int_w_compactness', 0)} single_models={obj_comp.get('single_plant_models_count', 0)})")
         print(f"  scale={obj_comp.get('scale', 0)} weight_precision={obj_comp.get('weight_precision', 0)}")
     obj_bound = summary.get('objective_bound_metrics', {}) or {}
     if obj_bound:
