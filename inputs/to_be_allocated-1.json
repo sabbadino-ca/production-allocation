@@ -69,6 +69,18 @@
                     "model": "model3",
                     "submodel" : "submodel32",
                     "quantity": 0
+                },
+                {
+                    "modelFamily": "family2",
+                    "model": "modelKO1",
+                    "submodel" : "submodel32",
+                    "quantity": 10
+                },
+                {
+                    "modelFamily": "family2",
+                    "model": "modelKO2",
+                    "submodel" : "submodel32",
+                    "quantity": 0
                 }
             ]
         }

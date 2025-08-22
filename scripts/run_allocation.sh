@@ -10,6 +10,7 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Input file paths
 PLANTS_FILE="$PROJECT_ROOT/inputs/plants-info-1.json"
 ORDERS_FILE="$PROJECT_ROOT/inputs/to_be_allocated-1.json"
+SETTINGS_FILE="$PROJECT_ROOT/inputs/settings-1.json"
 
 # Python executable (use virtual environment if available)
 if [ -f "$PROJECT_ROOT/.venv/Scripts/python.exe" ]; then
@@ -23,6 +24,7 @@ fi
 echo "Running Production Allocation Optimizer..."
 echo "Plants file: $PLANTS_FILE"
 echo "Orders file: $ORDERS_FILE"
+echo "Settings file: $SETTINGS_FILE"
 echo "Python executable: $PYTHON_EXE"
 echo ""
 
@@ -30,4 +32,4 @@ echo ""
 cd "$PROJECT_ROOT"
 
 # Run the main script
-$PYTHON_EXE main.py --plants "$PLANTS_FILE" --orders "$ORDERS_FILE"
+$PYTHON_EXE main.py --plants "$PLANTS_FILE" --orders "$ORDERS_FILE" --settings "$SETTINGS_FILE"
