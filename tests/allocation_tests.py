@@ -125,11 +125,23 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date)
-
-        # No allocations and no skipped (qty=0 means no variables, no constraint)
+        # Zero quantity with compatible plant: no allocation, not skipped
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 0)
         self.assertEqual(res["summary"]["total_demand"], 0)
+
+    def test_incompatible_zero_quantity_item_is_skipped(self) -> None:
+        plants = [
+            _plant(1, 100, ["M1"]),  # Does NOT allow M2
+        ]
+        orders = [
+            _order("O1", [_item("M2", "Sx", 0)], datetime.now().strftime("%Y-%m-%d")),
+        ]
+        res = allocate(plants, orders, self.current_date)
+        self.assertEqual(len(res["allocations"]), 0)
+        self.assertEqual(len(res["skipped"]), 1)
+        self.assertEqual(res["skipped"][0]["reason"], "no_compatible_plant")
+        self.assertEqual(res["skipped"][0]["quantity"], 0)
 
     def test_multiple_orders_and_models(self) -> None:
         plants = [
