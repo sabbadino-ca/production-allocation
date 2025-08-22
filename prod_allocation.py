@@ -100,6 +100,8 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
 
   # Track items that cannot be produced by any plant
   skipped: List[SkippedRow] = []
+  # Indices of items skipped (no compatible plant or too large for any single plant)
+  skipped_indices: set[int] = set()
 
   # Precompute compatible plants per item
   compatible_plants: List[List[int]] = []
@@ -121,7 +123,29 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
         "quantity": qty,
         "reason": "no_compatible_plant",
       })
+      skipped_indices.add(k_idx)
       continue
+    # Skip if item is unsplittable and:
+    #  - Its quantity exceeds every single compatible plant's capacity (cannot fit on any one)
+    #  - BUT its quantity is still less than or equal to the aggregate capacity across those plants
+    #    (i.e., it could fit only if splitting were allowed).
+    # In this case, classify as too_large_for_any_plant to distinguish from pure capacity shortage.
+    # If quantity also exceeds the aggregate capacity, we KEEP the item so it becomes 'unallocated'
+    # (reason: insufficient_capacity) rather than skipped.
+    if qty > 0:
+      indiv_exceeds = all(qty > int(plants[p_idx].get("capacity", 0)) for p_idx in cands)
+      total_compat_cap = sum(int(plants[p_idx].get("capacity", 0)) for p_idx in cands)
+      if indiv_exceeds and qty <= total_compat_cap:
+        skipped.append({
+          "order": orders[_oi]["order"],
+          "order_index": _oi,
+          "model": it["model"],
+          "submodel": it["submodel"],
+          "quantity": qty,
+          "reason": "too_large_for_any_plant",
+        })
+        skipped_indices.add(k_idx)
+        continue
     # placed var per item
     placed[k_idx] = model.NewBoolVar(f"placed_k{k_idx}")
     # assignment boolean per compatible plant
@@ -132,12 +156,11 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
   # assigned, the full quantity is placed. Sum of assigns equals placed.
   for k_idx, (_oi, it) in enumerate(items):
     qty = int(it.get("quantity", 0))
-    cands = compatible_plants[k_idx]
-    if not cands or qty == 0:
+    if k_idx in skipped_indices or qty == 0:
       # Skipped or zero-quantity: no assignment constraints
       continue
+    cands = compatible_plants[k_idx]
     assign_vars = [assign[p_idx, k_idx] for p_idx in cands]
-    # placed[k] exists because we created it above for items with cands
     model.Add(sum(assign_vars) == placed[k_idx])
 
   # Plant capacity constraints: sum of item quantities assigned to the plant
@@ -213,9 +236,9 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
     # Extract placements
     for k_idx, (order_idx, item) in enumerate(items):
       qty = int(item.get("quantity", 0))
-      cands = compatible_plants[k_idx]
-      if not cands or qty == 0:
+      if k_idx in skipped_indices or qty == 0:
         continue
+      cands = compatible_plants[k_idx]
       if k_idx in placed and solver.Value(placed[k_idx]) == 1:
         # Find the plant assigned
         assigned_p = None

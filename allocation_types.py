@@ -16,13 +16,19 @@ class AllocationRow(TypedDict):
 
 
 class SkippedRow(TypedDict):
-    """One item that was skipped during modeling and the reason why."""
-    order: str
-    order_index: int
-    model: str
-    submodel: str
-    quantity: int
-    reason: Literal["no_compatible_plant"]
+        """One item that was skipped during modeling and the reason why.
+
+        Reasons:
+            - no_compatible_plant: No plant can produce the item's model.
+            - too_large_for_any_plant: Compatible plants exist but each capacity is
+                smaller than the item's quantity (item is unsplittable).
+        """
+        order: str
+        order_index: int
+        model: str
+        submodel: str
+        quantity: int
+        reason: Literal["no_compatible_plant", "too_large_for_any_plant"]
 
 
 class Summary(TypedDict):

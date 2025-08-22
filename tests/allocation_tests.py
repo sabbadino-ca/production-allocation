@@ -143,6 +143,20 @@ class TestAllocate(unittest.TestCase):
         self.assertEqual(res["skipped"][0]["reason"], "no_compatible_plant")
         self.assertEqual(res["skipped"][0]["quantity"], 0)
 
+    def test_skip_when_item_too_large_for_any_single_plant(self) -> None:
+        plants = [
+            _plant(1, 5, ["M1"]),
+            _plant(2, 4, ["M1"]),
+        ]
+        orders = [
+            _order("O1", [_item("M1", "S1", 6)], datetime.now().strftime("%Y-%m-%d")),
+        ]
+        res = allocate(plants, orders, self.current_date)
+        self.assertEqual(len(res["allocations"]), 0)
+        self.assertEqual(len(res["skipped"]), 1)
+        self.assertEqual(res["skipped"][0]["reason"], "too_large_for_any_plant")
+        self.assertEqual(res["skipped"][0]["quantity"], 6)
+
     def test_multiple_orders_and_models(self) -> None:
         plants = [
             _plant(1, 100, ["M1", "M2"]),
