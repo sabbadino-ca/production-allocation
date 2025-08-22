@@ -1,104 +1,98 @@
-"""
-Data loading utilities for production allocation optimization.
+"""Data loading utilities.
 
-Provides typed loaders that return domain-typed structures defined in
-`domain_types` (Plant, Order, Item).
+This module now performs *only* file existence checks and JSON parsing.
+All structural / semantic validation of plants, orders, and settings has
+been moved to the dedicated validation functions in ``input_Validations``.
+
+Design choice
+-------------
+Separating parsing from validation keeps I/O concerns (file reading &
+deserialization) decoupled from business rules. Tests that assert error
+conditions for malformed content must now explicitly call the validation
+functions (``validate_plants`` / ``validate_orders``) after loading.
 """
 import json
-from typing import List, cast, Tuple, Any, Dict
+from typing import List, cast, Any, Dict
 import os
 from domain_types import Plant, Order
 
+__all__ = ["load_plants", "load_orders", "load_settings"]
+
 def load_plants(path: str) -> List[Plant]:
-    """Load plant info from JSON file.
+    """Load plants JSON file without performing structural validation.
+
+    Only responsibilities:
+      * Check that the file exists.
+      * Parse JSON content.
+      * Return the raw list (cast) – may be invalid until validated separately.
 
     Args:
-        path: Path to a JSON file containing a list of plants. Each element
-              must include keys: "plantid" (int), "plantfamily" (str),
-              "capacity" (int), and "allowedModels" (list[str]).
+        path: Path to a JSON file expected to contain a list of plants.
 
     Returns:
-        A list of Plant-typed dictionaries.
+        Parsed JSON cast to ``List[Plant]`` (no guarantees about schema).
 
     Raises:
         FileNotFoundError: If the file does not exist.
-        ValueError: If the JSON does not meet schema expectations.
+        ValueError: If JSON parsing fails.
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Plants file not found: {path}")
     with open(path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    if not isinstance(data, list):
-        raise ValueError("Plants data must be a list.")
-    for plant in data:
-        if not all(k in plant for k in ("plantid", "plantfamily", "capacity", "allowedModels")):
-            raise ValueError(f"Missing required plant fields in: {plant}")
-        if not isinstance(plant["allowedModels"], list):
-            raise ValueError(f"allowedModels must be a list in: {plant}")
-        if len(plant["allowedModels"]) < 1:
-            raise ValueError(f"allowedModels must contain at least one item in: {plant}")
+        try:
+            data = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Failed to parse plants JSON: {e}")
+    # Intentionally no structural checks here; caller should invoke validate_plants.
     return cast(List[Plant], data)
 
 def load_orders(path: str) -> List[Order]:
-    """Load orders from JSON file.
+    """Load orders JSON file without structural validation.
+
+    Behavior:
+      * Checks file existence.
+      * Parses JSON.
+      * If top-level object contains an ``orders`` key, returns that value;
+        otherwise, if the top-level itself is a list, returns it directly.
+      * No date / field / type checks are performed here.
 
     Args:
-        path: Path to a JSON file containing an object with an "orders" array,
-              where each order has keys: "order" (str), "dueDate" (yyyy-MM-dd),
-              and "items" (list[Item]).
+        path: Path to a JSON file containing either a list of orders or an
+              object with an ``orders`` list.
 
     Returns:
-        A list of Order-typed dictionaries.
+        Parsed list of orders (possibly unvalidated) cast to ``List[Order]``.
 
     Raises:
         FileNotFoundError: If the file does not exist.
-        ValueError: If the JSON does not meet schema expectations or dates are invalid.
+        ValueError: If JSON parsing fails.
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Orders file not found: {path}")
     with open(path, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    if "orders" not in data or not isinstance(data["orders"], list):
-        raise ValueError("Orders data must contain a list under 'orders' key.")
-    from datetime import datetime
-    for order in data["orders"]:
-        if not all(k in order for k in ("order", "dueDate", "items")):
-            raise ValueError(f"Missing required order fields in: {order}")
-        # Check dueDate format
         try:
-            datetime.strptime(order["dueDate"], "%Y-%m-%d")
-        except Exception:
-            raise ValueError(f"dueDate must be in yyyy-MM-dd format in: {order}")
-        if not isinstance(order["items"], list):
-            raise ValueError(f"Items must be a list in: {order}")
-        for item in order["items"]:
-            if not all(k in item for k in ("modelFamily", "model", "submodel", "quantity")):
-                raise ValueError(f"Missing required item fields in: {item}")
-    return cast(List[Order], data["orders"])
+            data = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Failed to parse orders JSON: {e}")
+    if isinstance(data, dict) and "orders" in data:
+        orders_raw = data["orders"]
+    else:
+        orders_raw = data  # could already be a list
+    return cast(List[Order], orders_raw)
 
 
-def load_settings(path: str) -> Tuple[float, float]:
-    """Load optimization weighting settings.
-
-    Expects a JSON object containing at least the keys:
-      - "w_quantity" (number >= 0)
-      - "w_due" (number >= 0)
-
-    Example JSON:
-    {
-      "w_quantity": 5.0,
-      "w_due": 1.0
-    }
+def load_settings(path: str) -> Any:
+    """Load settings JSON file (no validation).
 
     Args:
         path: Path to a JSON settings file.
 
     Returns:
-        Tuple (w_quantity, w_due) as floats.
+        Parsed JSON object (dict or other JSON type) as-is.
 
     Raises:
         FileNotFoundError: If the file does not exist.
-        ValueError: If required keys are missing or invalid.
+        ValueError: If JSON parsing fails.
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Settings file not found: {path}")
@@ -107,17 +101,4 @@ def load_settings(path: str) -> Tuple[float, float]:
             data: Dict[str, Any] = json.load(f)
         except Exception as e:
             raise ValueError(f"Failed to parse settings JSON: {e}")
-
-    if not isinstance(data, dict):
-        raise ValueError("Settings file must contain a JSON object.")
-    missing = [k for k in ("w_quantity", "w_due") if k not in data]
-    if missing:
-        raise ValueError(f"Settings file missing keys: {missing}")
-    try:
-        w_quantity = float(data["w_quantity"])
-        w_due = float(data["w_due"])
-    except Exception:
-        raise ValueError("w_quantity and w_due must be numeric.")
-    if w_quantity < 0 or w_due < 0:
-        raise ValueError("w_quantity and w_due must be non-negative.")
-    return w_quantity, w_due
+    return data

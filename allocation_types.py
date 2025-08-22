@@ -61,3 +61,20 @@ class AllocateResult(TypedDict):
     allocations: List[AllocationRow]
     skipped: List[SkippedRow]
     unallocated: List[UnallocatedRow]
+
+
+class WeightsConfig(TypedDict, total=False):
+        """Weight configuration for objective components.
+
+        Fields:
+            w_quantity: Weight applied to quantity component (>=0).
+            w_due: Weight applied to due-date urgency component (>=0).
+            horizon_days: Planning horizon for urgency decay (default 30 if omitted).
+            scale: Scaling factor for normalized components (default 1000).
+            weight_precision: Integer precision multiplier for weights (default 1).
+        """
+        w_quantity: float
+        w_due: float
+        horizon_days: int
+        scale: int
+        weight_precision: int

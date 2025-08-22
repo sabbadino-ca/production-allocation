@@ -52,4 +52,6 @@ Do not make up links when searching for documentation
 
 ABOUT RUNNING TESTS
 ========================
-**Important**: This project uses a virtual environment underf the .venv folder : use the python.exe in that folder when running the unittest command
+**Important**: 
+- This project uses a virtual environment underf the .venv folder : use the python.exe in that folder when running the unittest command. 
+- Tests files are under the tests/ directory.

@@ -12,32 +12,26 @@ validate_input_data(plants, orders)
 """
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 from domain_types import Plant, Order
+from allocation_types import WeightsConfig
 
-__all__ = ["validate_input_data"]
+__all__ = ["validate_plants", "validate_orders", "validate_input_data", "validate_settings_payload"]
 
-def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
-  """Validate input data for plants and orders.
+
+def validate_plants(plants: List[Plant]) -> None:
+  """Validate a list of plants.
 
   Args:
     plants: List of Plant dictionaries to validate.
-    orders: List of Order dictionaries to validate.
 
   Raises:
-    ValueError: If data does not meet schema expectations.
-
-  Rules enforced (integer policy update):
-    - Plant capacity must be a non-negative integer (floats that are not whole
-      numbers are rejected).
-    - Item quantity must be a non-negative integer (floats that are not whole
-      numbers are rejected).
+    ValueError: If plant list or any plant entry is invalid.
   """
-  # Validate plants data
   if not isinstance(plants, list):
     raise ValueError("Plants data must be a list.")
-  
+
   for plant in plants:
     if not all(k in plant for k in ("plantid", "plantfamily", "capacity", "allowedModels")):
       raise ValueError(f"Missing required plant fields in: {plant}")
@@ -54,10 +48,19 @@ def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
     if int(capacity_val) < 0:
       raise ValueError(f"Plant capacity must be >= 0 (plantid={plant.get('plantid')} got {capacity_val})")
 
-  # Validate orders data  
+
+def validate_orders(orders: List[Order]) -> None:
+  """Validate a list of orders (and nested items).
+
+  Args:
+    orders: List of Order dictionaries to validate.
+
+  Raises:
+    ValueError: If order list, order entries, or item entries are invalid.
+  """
   if not isinstance(orders, list):
     raise ValueError("Orders data must be a list.")
-    
+
   for order in orders:
     if not all(k in order for k in ("order", "dueDate", "items")):
       raise ValueError(f"Missing required order fields in: {order}")
@@ -79,3 +82,50 @@ def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
         raise ValueError(f"Item quantity must be an integer (got {quantity}) in: {item}")
       if int(quantity) < 0:
         raise ValueError(f"Item quantity must be >= 0 but got {quantity} in: {item}")
+
+def validate_input_data(
+    plants: List[Plant],
+    orders: List[Order],
+    settings: WeightsConfig
+) -> None:
+  """Validate plants, orders, and optionally weights.
+
+  Args:
+    plants: Plants to validate.
+    orders: Orders to validate.
+    settings: Optional weights config (must contain w_quantity & w_due if provided).
+
+  Raises:
+    ValueError: If any structural validation fails or mandatory weight keys missing.
+  """
+  validate_plants(plants)
+  validate_orders(orders)
+  if settings is not None:
+    validate_settings_payload(dict(settings))  # cast for type checker
+
+
+def validate_settings_payload(data: dict) -> tuple[float, float]:
+  """Validate settings JSON payload and extract weights.
+
+  Args:
+    data: Parsed JSON object expected to contain "w_quantity" and "w_due".
+
+  Returns:
+    Tuple (w_quantity, w_due) as non-negative floats.
+
+  Raises:
+    ValueError: If structure or values are invalid.
+  """
+  if not isinstance(data, dict):
+    raise ValueError("Settings file must contain a JSON object.")
+  missing = [k for k in ("w_quantity", "w_due") if k not in data]
+  if missing:
+    raise ValueError(f"Settings file missing keys: {missing}")
+  try:
+    w_quantity = float(data["w_quantity"])
+    w_due = float(data["w_due"])
+  except Exception:
+    raise ValueError("w_quantity and w_due must be numeric.")
+  if w_quantity < 0 or w_due < 0:
+    raise ValueError("w_quantity and w_due must be non-negative.")
+  return w_quantity, w_due

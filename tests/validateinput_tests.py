@@ -4,8 +4,12 @@ Unit tests for data_loader.py input parsing and validation.
 import unittest
 import os
 from datetime import datetime
-from data_loader import load_plants, load_orders
-from prod_allocation import allocate
+from typing import List
+
+from data_loader import *
+from input_Validations import *
+from prod_allocation import *
+from domain_types import Plant, Order, Item  # TypedDicts for static typing (Pylance)
 
 TEST_PLANTS = os.path.join(os.path.dirname(__file__), 'plants-info-1.json')
 TEST_ORDERS = os.path.join(os.path.dirname(__file__), 'to_be_allocated-1.json')
@@ -47,7 +51,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write('{"plantid": 1}')
             tf.flush()
             with self.assertRaises(ValueError):
-                load_plants(tf.name)
+                plants = load_plants(tf.name)
+                validate_plants(plants)
         os.remove(tf.name)
 
     def test_load_plants_missing_fields(self):
@@ -56,7 +61,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_plants(tf.name)
+                plants = load_plants(tf.name)
+                validate_plants(plants)
         os.remove(tf.name)
 
     def test_load_plants_empty_allowed_models(self):
@@ -65,7 +71,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_plants(tf.name)
+                plants = load_plants(tf.name)
+                validate_plants(plants)
         os.remove(tf.name)
 
     def test_load_orders_missing_orders_key(self):
@@ -74,7 +81,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_orders(tf.name)
+                orders = load_orders(tf.name)
+                validate_orders(orders)
         os.remove(tf.name)
 
     def test_load_orders_orders_not_list(self):
@@ -83,7 +91,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_orders(tf.name)
+                orders = load_orders(tf.name)
+                validate_orders(orders)
         os.remove(tf.name)
 
     def test_load_orders_missing_order_fields(self):
@@ -92,7 +101,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_orders(tf.name)
+                orders = load_orders(tf.name)
+                validate_orders(orders)
         os.remove(tf.name)
 
     def test_load_orders_bad_due_date_format(self):
@@ -101,7 +111,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_orders(tf.name)
+                orders = load_orders(tf.name)
+                validate_orders(orders)
         os.remove(tf.name)
 
     def test_load_orders_items_not_list(self):
@@ -110,7 +121,8 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_orders(tf.name)
+                orders = load_orders(tf.name)
+                validate_orders(orders)
         os.remove(tf.name)
 
     def test_load_orders_item_missing_fields(self):
@@ -119,27 +131,34 @@ class TestDataLoader(unittest.TestCase):
             tf.write(bad_data)
             tf.flush()
             with self.assertRaises(ValueError):
-                load_orders(tf.name)
+                orders = load_orders(tf.name)
+                validate_orders(orders)
         os.remove(tf.name)
 
     def test_negative_quantity_validation(self) -> None:
-        """Negative quantities should be rejected during validation."""
-        plants = [
+        """Negative quantities should be rejected during validation.
+
+        Pylance note: Explicit List[Plant] and List[Order] annotations ensure the
+        call to allocate() matches its signature (List[Plant], List[Order], ...).
+        """
+        plants: List[Plant] = [
             {"plantid": 1, "plantfamily": "F1", "capacity": 100, "allowedModels": ["M1"]},
         ]
         # Create order with negative quantity to test validation
-        orders = [
+        items: List[Item] = [
+            {"modelFamily": "F1", "model": "M1", "submodel": "S1", "quantity": -5},
+        ]
+        orders: List[Order] = [
             {
-                "order": "O1", 
+                "order": "O1",
                 "dueDate": "2025-01-01",
-                "items": [{"modelFamily": "F1", "model": "M1", "submodel": "S1", "quantity": -5}]
+                "items": items,
             }
         ]
-        current_date = datetime(2025, 8, 21)
-        
         with self.assertRaises(ValueError) as context:
-            allocate(plants, orders, current_date, 5.0, 1.0)
-        
+            settings: WeightsConfig = {"w_quantity": 5.0, "w_due": 1.0}
+            validate_input_data(plants, orders, settings)
+
         self.assertIn("Item quantity must be >= 0", str(context.exception))
         self.assertIn("got -5", str(context.exception))
 

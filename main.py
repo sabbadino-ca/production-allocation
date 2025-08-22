@@ -8,6 +8,7 @@ from data_loader import load_plants, load_orders, load_settings
 from typing import List
 from domain_types import Plant, Order
 from prod_allocation import allocate
+from allocation_types import WeightsConfig
 
 def main():
     parser = argparse.ArgumentParser(description="Production Allocation Optimizer")
@@ -21,9 +22,13 @@ def main():
 
     print(f"Loaded {len(plants)} plants and {len(orders)} orders.")
     current_date = datetime.now()
-    w_quantity, w_due = load_settings(args.settings)
-    print(f"Loaded weights -> w_quantity={w_quantity}, w_due={w_due}")
-    result = allocate(plants, orders, current_date, w_quantity, w_due)
+    settings = load_settings(args.settings)
+    weights: WeightsConfig = {
+        "w_quantity": float(settings.get("w_quantity", 5.0)),
+        "w_due": float(settings.get("w_due", 1.0)),
+    }
+    print(f"Loaded weights -> w_quantity={weights['w_quantity']}, w_due={weights['w_due']}")
+    result = allocate(plants, orders, current_date, weights)
     
     # Print summary
     summary = result.get("summary", {})

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 from domain_types import Plant, Order, Item
-from allocation_types import AllocationRow, SkippedRow, Summary, AllocateResult, UnallocatedRow
+from allocation_types import AllocationRow, SkippedRow, Summary, AllocateResult, UnallocatedRow, WeightsConfig
 from ortools.sat.python import cp_model
 from datetime import datetime
 from input_Validations import validate_input_data
@@ -32,11 +32,7 @@ def allocate(
   plants: List[Plant],
   orders: List[Order],
   current_date: datetime,
-  w_quantity: float,
-  w_due: float,
-  horizon_days: int = 30,
-  scale: int = 1000,
-  weight_precision: int = 1,
+  weights: WeightsConfig,
 ) -> AllocateResult:
   """
   Build an optimization CP-SAT model (always feasible) with:
@@ -62,12 +58,12 @@ def allocate(
       Item dictionaries with 'model', 'submodel', 'modelFamily', and 'quantity').
     current_date: Current date for due date priority calculations.
 
-  Args (additional weighting parameters):
-    w_quantity: Required weight applied to normalized quantity component (pass e.g. 5).
-    w_due: Required weight applied to normalized due-date urgency component (pass e.g. 1).
-    horizon_days: Positive horizon for future due-date decay (days in future beyond this drop to 0 urgency).
-    scale: Integer scaling factor applied to each normalized component (quantity, urgency) BEFORE weighting.
-    weight_precision: Multiplier used to convert floating weights (w_quantity, w_due) into integers.
+  Weight configuration (weights dict):
+    w_quantity: Weight applied to normalized quantity component (default 5 if missing).
+    w_due: Weight applied to normalized due-date urgency component (default 1 if missing).
+    horizon_days: Positive horizon for future due-date decay (default 30).
+    scale: Integer scaling factor for normalized components (default 1000).
+    weight_precision: Multiplier converting floating weights into integers (default 1).
       Effective per-item coefficient = (int(w_quantity * weight_precision) * (scale * norm_qty_k))
         + (int(w_due * weight_precision) * (scale * norm_urg_k)).
       Keep resulting product (weight * scale) *<= ~1e7 to avoid very large coefficients.
@@ -86,8 +82,21 @@ def allocate(
       https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpModel.Maximize
       https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpSolver.Solve
   """
-  # Validate input data first
-  validate_input_data(plants, orders)
+  # Validate structural input data and provided weights/settings mapping.
+  # validate_input_data now accepts either raw settings dict or WeightsConfig.
+  validate_input_data(plants, orders, weights)
+
+  # Extract weights with defaults (0.0 forces explicit user specification)
+  w_quantity = float(weights.get("w_quantity", 0.0))
+  w_due = float(weights.get("w_due", 0.0))
+  
+  horizon_days = int(weights.get("horizon_days", 30))
+  scale = int(weights.get("scale", 1000))
+  weight_precision = int(weights.get("weight_precision", 1))
+
+  # Enforce required weights must be strictly positive
+  if w_quantity <= 0 or w_due <= 0:
+    raise ValueError("w_quantity and w_due must be > 0 (provide positive weights in settings)")
   
   # Aggregate quick stats
   total_capacity = sum(int(p.get("capacity", 0)) for p in plants)
@@ -285,8 +294,8 @@ def allocate(
   # NOTE: Keep (weight_precision * scale * max_component_value) within a safe bound.
   int_w_quantity = int(round(w_quantity * weight_precision))
   int_w_due = int(round(w_due * weight_precision))
-  if int_w_quantity < 0 or int_w_due < 0:
-    raise ValueError("Weights must be non-negative")
+  if int_w_quantity <= 0 or int_w_due <= 0:
+    raise ValueError("Integer-converted weights must be > 0; check w_quantity / w_due and weight_precision")
 
   # Build component sums (LinearExpr). If empty, skip objective.
   sum_qty_expr = sum(qty_component_terms) if qty_component_terms else None
