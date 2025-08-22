@@ -39,7 +39,7 @@ def main():
     print(f"Plants: {summary.get('plants_count', 0)}  | Orders: {summary.get('orders_count', 0)}  | Unique Models: {summary.get('unique_models_count', 0)}")
     print(f"Total Capacity: {summary.get('total_capacity', 0)}  | Total Demand: {summary.get('total_demand', 0)}  | Capacity - Demand: {summary.get('capacity_minus_demand', 0)}")
     print(f"Total Input Items: {summary.get('total_input_items', 0)}")
-    print(f"Allocated Items: {summary.get('allocated_items_count', 0)}  | Unallocated Items: {summary.get('unallocated_items_count', 0)}  | Skipped Items: {summary.get('skipped_count', 0)} (demand: {summary.get('skipped_demand', 0)})")
+    print(f"Allocated Items: {summary.get('allocated_items_count', 0)}  | Unallocated Items: {summary.get('unallocated_items_count', 0)}  | Skipped Items: {summary.get('skipped_count', 0)} (demand: {summary.get('skipped_demand', 0)})  | Zero-Qty Items: {summary.get('zero_quantity_items_count', 0)}")
     print(f"Total Allocated Quantity: {summary.get('total_allocated_quantity', 0)}  | Allocated Ratio: {summary.get('allocated_ratio', 0.0):.2%}")
     print(f"Total Output Reported Items: {summary.get('total_output_reported_items', 0)}")
     print(f"Missing Items Count (should be 0): {summary.get('missing_items_count', 0)}")
@@ -110,6 +110,16 @@ def main():
         for unalloc in unallocated:
             print(f"{unalloc['order']:<12} {unalloc['model']:<15} {unalloc['submodel']:<15} {unalloc['requested_qty']:<10} {unalloc['reason']:<25}")
     
+    # Print zero quantity items
+    zero_qty = result.get("zero_quantity_items", [])
+    if zero_qty:
+        print(f"\nZERO QUANTITY ITEMS ({len(zero_qty)} items) - Excluded from model")
+        print("-"*80)
+        print(f"{'Order':<12} {'Model':<15} {'Submodel':<15} {'Quantity':<10}")
+        print("-"*80)
+        for z in zero_qty:
+            print(f"{z['order']:<12} {z['model']:<15} {z['submodel']:<15} {z['quantity']:<10}")
+
     print("\n" + "="*60)
 
 if __name__ == "__main__":

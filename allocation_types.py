@@ -31,6 +31,20 @@ class SkippedRow(TypedDict):
         reason: Literal["no_compatible_plant", "too_large_for_any_plant"]
 
 
+class ZeroQuantityRow(TypedDict):
+    """One input item whose requested quantity was 0 and thus excluded from modeling.
+
+    Zero-quantity items are *never* modeled (no variables) and are reported
+    separately from ``skipped`` (structural infeasibility) and ``unallocated``
+    (modeled but not chosen). They do not contribute to demand or objective.
+    """
+    order: str
+    order_index: int
+    model: str
+    submodel: str
+    quantity: int  # always 0
+
+
 class ObjectiveComponents(TypedDict):
     """Integer objective component breakdown (scaled)."""
     quantity_component: int
@@ -80,8 +94,10 @@ class Summary(TypedDict):
     allocated_ratio: float
     total_output_reported_items: int
     missing_items_count: int
+    zero_quantity_items_count: int
     plant_utilization: List["PlantUtilizationRow"]
     diagnostics: "Diagnostics"
+    solver_parameters: "SolverParameters"
 
 
 class PlantUtilizationRow(TypedDict):
@@ -125,6 +141,7 @@ class AllocateResult(TypedDict):
     allocations: List[AllocationRow]
     skipped: List[SkippedRow]
     unallocated: List[UnallocatedRow]
+    zero_quantity_items: List[ZeroQuantityRow]
 
 
 class _WeightsConfigRequired(TypedDict):
@@ -146,7 +163,14 @@ class WeightsConfig(_WeightsConfigRequired, total=False):
         horizon_days: Planning horizon for urgency decay (>=1, default 30).
         scale: Scaling factor for normalized components (default 1000).
         weight_precision: Integer precision multiplier for weights (default 1).
+        max_time_seconds: Time limit for the CP-SAT solver wall clock (default 60).
     """
     horizon_days: int
     scale: int
     weight_precision: int
+    max_time_seconds: float
+
+
+class SolverParameters(TypedDict):
+    """Subset of solver parameters we expose in output for transparency."""
+    max_time_seconds: float

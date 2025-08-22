@@ -118,7 +118,7 @@ class TestAllocate(unittest.TestCase):
         # No allocations since not modeled
         self.assertEqual(len(res["allocations"]), 0)
 
-    def test_zero_quantity_items_are_ignored(self) -> None:
+    def test_zero_quantity_items_are_reported_separately(self) -> None:
         plants = [
             _plant(1, 100, ["M1"]),
         ]
@@ -126,9 +126,11 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
-        # Zero quantity with compatible plant: no allocation, not skipped
+        # Zero quantity with compatible plant: no allocation, not skipped, appears in zero_quantity_items
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 0)
+        self.assertEqual(len(res.get("zero_quantity_items", [])), 1)
+        self.assertEqual(res["summary"]["zero_quantity_items_count"], 1)
         self.assertEqual(res["summary"]["total_demand"], 0)
 
     def test_default_horizon_days_used(self) -> None:
@@ -143,7 +145,7 @@ class TestAllocate(unittest.TestCase):
         self.assertIn("diagnostics", res["summary"])
         self.assertEqual(res["summary"]["diagnostics"]["horizon_days"], 30)
 
-    def test_incompatible_zero_quantity_item_is_skipped(self) -> None:
+    def test_incompatible_zero_quantity_item_is_still_reported_zero_qty(self) -> None:
         plants = [
             _plant(1, 100, ["M1"]),  # Does NOT allow M2
         ]
@@ -151,10 +153,11 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M2", "Sx", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        # Even though incompatible, zero quantity classification takes precedence; reported in zero_quantity_items
         self.assertEqual(len(res["allocations"]), 0)
-        self.assertEqual(len(res["skipped"]), 1)
-        self.assertEqual(res["skipped"][0]["reason"], "no_compatible_plant")
-        self.assertEqual(res["skipped"][0]["quantity"], 0)
+        self.assertEqual(len(res["skipped"]), 0)
+        self.assertEqual(len(res.get("zero_quantity_items", [])), 1)
+        self.assertEqual(res["summary"]["zero_quantity_items_count"], 1)
 
     def test_skip_when_item_too_large_for_any_single_plant(self) -> None:
         plants = [
@@ -236,9 +239,10 @@ class TestAllocate(unittest.TestCase):
         # All items are compatible, so skipped is zero
         self.assertEqual(len(res["skipped"]), 0)
 
-    def test_over_demand_returns_unallocated_instead_of_infeasible(self) -> None:
-        """When demand exceeds capacity, solution is feasible with maximum placement
-        and leftover items reported under 'unallocated'."""
+    def test_single_oversized_item_is_skipped_not_unallocated(self) -> None:
+        """An unsplittable item whose quantity exceeds every compatible plant's
+        individual capacity is structurally impossible and must be SKIPPED with
+        reason 'too_large_for_any_plant' (not reported as unallocated)."""
         plants = [
             _plant(1, 5, ["M1"]),
             _plant(2, 3, ["M1"]),
@@ -247,13 +251,14 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
         res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
-
         self.assertIn(res["summary"]["status"], {"OPTIMAL", "FEASIBLE"})
-        # Single item quantity=10 cannot be partially placed; expect 0 allocated
-        total_alloc = sum(a["allocated_qty"] for a in res["allocations"])
-        self.assertEqual(total_alloc, 0)
-        # The item should be marked unallocated
-        self.assertEqual(len(res.get("unallocated", [])), 1)
+        # No allocation possible
+        self.assertEqual(len(res["allocations"]), 0)
+        # Should be skipped with the correct reason
+        self.assertEqual(len(res["skipped"]), 1)
+        self.assertEqual(res["skipped"][0]["reason"], "too_large_for_any_plant")
+        # No unallocated items because it never entered the model
+        self.assertEqual(len(res.get("unallocated", [])), 0)
 
     def test_due_date_priority_past_vs_future(self) -> None:
         """Past due items should get allocated before future due items when capacity is limited."""

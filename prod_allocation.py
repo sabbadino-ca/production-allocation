@@ -85,7 +85,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple
 from domain_types import Plant, Order, Item
-from allocation_types import AllocationRow, SkippedRow, Summary, AllocateResult, UnallocatedRow, WeightsConfig
+from allocation_types import AllocationRow, SkippedRow, Summary, AllocateResult, UnallocatedRow, WeightsConfig, ZeroQuantityRow
 from ortools.sat.python import cp_model
 from datetime import datetime
 from input_Validations import validate_input_data
@@ -210,6 +210,10 @@ def allocate(
     - horizon_days (int >=1, default DEFAULT_HORIZON_DAYS)
     - scale (int, default 1000)
     - weight_precision (int, default 1)
+    - max_time_seconds (float > 0, default 60): Wall clock time limit for the CP-SAT solver
+      (mapped to CpSolverParameters.max_time_in_seconds). When the limit is
+      reached CP-SAT returns the best incumbent solution found so far with
+      status FEASIBLE (or OPTIMAL if proven optimal sooner).
 
   Coefficient Formula
   -------------------
@@ -256,6 +260,9 @@ def allocate(
   horizon_days = int(weights.get("horizon_days", DEFAULT_HORIZON_DAYS))
   scale = int(weights.get("scale", 1000))
   weight_precision = int(weights.get("weight_precision", 1))
+  max_time_seconds = float(weights.get("max_time_seconds", 60))
+  if max_time_seconds <= 0:
+    max_time_seconds = 60.0  # fallback safety
 
   # Enforce required weights must be strictly positive
   if w_quantity <= 0 or w_due <= 0:
@@ -283,7 +290,7 @@ def allocate(
 
   # Binary assignment variables assign[p,k] only for allowed (plant p, item k)
   assign: Dict[Tuple[int, int], cp_model.IntVar] = {}
-  # placed[k] indicates whether item k is fully placed on exactly one plant
+  # placed[k] indicates whether item k is fully placed on exactly one plant (equality channeling applied later)
   placed: Dict[int, cp_model.IntVar] = {}
 
   def plant_can_make(plant: Plant, item: Item) -> bool:
@@ -291,6 +298,7 @@ def allocate(
 
   # Track items that cannot be produced by any plant
   skipped: List[SkippedRow] = []
+  zero_quantity_items: List[ZeroQuantityRow] = []
   # Indices of items skipped (no compatible plant or too large for any single plant)
   skipped_indices: set[int] = set()
 
@@ -304,10 +312,19 @@ def allocate(
   for k_idx, (_oi, it) in enumerate(items):
     qty = int(it.get("quantity", 0))
     cands = compatible_plants[k_idx]
-  # --- HARD feasibility preprocessing (Compatibility) ---
-  # Skip any item (even zero quantity) with no compatible plant.
-  # This enforces the compatibility hard constraint by construction: we simply never
-  # create decision variables for incompatible (plant,item) pairs.
+    # --- ZERO QUANTITY HANDLING ---
+    # Zero-quantity items are excluded from modeling but reported separately.
+    if qty == 0:
+      zero_quantity_items.append({
+        "order": orders[_oi]["order"],
+        "order_index": _oi,
+        "model": it["model"],
+        "submodel": it["submodel"],
+        "quantity": 0,
+      })
+      skipped_indices.add(k_idx)  # prevent later logic from considering
+      continue
+    # --- HARD feasibility preprocessing (Compatibility) ---
     if not cands:
       skipped.append({
         "order": orders[_oi]["order"],
@@ -319,18 +336,10 @@ def allocate(
       })
       skipped_indices.add(k_idx)
       continue
-  # --- HARD feasibility preprocessing (Unsplittable size) ---
-  # Skip if item is unsplittable and:
-    #  - Its quantity exceeds every single compatible plant's capacity (cannot fit on any one)
-    #  - BUT its quantity is still less than or equal to the aggregate capacity across those plants
-    #    (i.e., it could fit only if splitting were allowed).
-    # In this case, classify as too_large_for_any_plant to distinguish from pure capacity shortage.
-    # If quantity also exceeds the aggregate capacity, we KEEP the item so it becomes 'unallocated'
-    # (reason: insufficient_capacity) rather than skipped.
+    # --- HARD feasibility preprocessing (Unsplittable size) ---
     if qty > 0:
       indiv_exceeds = all(qty > int(plants[p_idx].get("capacity", 0)) for p_idx in cands)
-      total_compat_cap = sum(int(plants[p_idx].get("capacity", 0)) for p_idx in cands)
-      if indiv_exceeds and qty <= total_compat_cap:
+      if indiv_exceeds:
         skipped.append({
           "order": orders[_oi]["order"],
           "order_index": _oi,
@@ -341,36 +350,24 @@ def allocate(
         })
         skipped_indices.add(k_idx)
         continue
-    # placed var per item
+    # placed var per item (only for modeled items with qty>0 and feasible)
     placed[k_idx] = model.NewBoolVar(f"placed_k{k_idx}")
-    # assignment boolean per compatible plant
     for p_idx in cands:
       assign[p_idx, k_idx] = model.NewBoolVar(f"assign_p{plants[p_idx]['plantid']}_k{k_idx}")
 
-  # All-or-nothing assignment: each item assigned to at most one plant; if
-  # assigned, the full quantity is placed.
-  # --- HARD CONSTRAINT (Reified channeling): ---
-  #  placed[k] == 1  => exactly one assign var is 1 (sum == 1)
-  #  placed[k] == 0  => all assign vars are 0 (sum == 0)
-  # We encode with two conditional constraints plus an unconditional
-  # AddAtMostOne(assign_vars) to improve propagation before placed[k] is fixed.
-  # This is logically equivalent to: sum(assign_vars) == placed[k], but can
-  # strengthen early pruning in the search. (See cp_model.Add / OnlyEnforceIf docs)
+  # All-or-nothing assignment: equality channeling
+  # For each modeled item k: sum_p assign[p,k] == placed[k]
+  # Ensures at most one assignment (since sum of Booleans <=1 automatically) and
+  # ties placed directly to assignment presence.
   for k_idx, (_oi, it) in enumerate(items):
-    qty = int(it.get("quantity", 0))
-    if k_idx in skipped_indices or qty == 0:
-      # Skipped or zero-quantity: no assignment constraints
+    if k_idx in skipped_indices:
+      continue
+    if k_idx not in placed:
       continue
     cands = compatible_plants[k_idx]
     assign_vars = [assign[p_idx, k_idx] for p_idx in cands]
-    if len(assign_vars) == 1:
-      # Single candidate plant: direct channeling
-      model.Add(assign_vars[0] == placed[k_idx])
-    else:
-      model.AddAtMostOne(assign_vars)
-      sum_expr = sum(assign_vars)
-      model.Add(sum_expr == 1).OnlyEnforceIf(placed[k_idx])
-      model.Add(sum_expr == 0).OnlyEnforceIf(placed[k_idx].Not())
+    if assign_vars:
+      model.Add(sum(assign_vars) == placed[k_idx])
 
   # Plant capacity constraints: sum of item quantities assigned to the plant
   # cannot exceed plant capacity
@@ -426,8 +423,6 @@ def allocate(
     if k_idx not in placed:
       continue
     qty = int(it.get("quantity", 0))
-    if qty <= 0:
-      continue
     norm_qty = (qty / max_qty) if max_qty > 0 else 0.0
     norm_urg = (raw_urgencies[k_idx] / raw_max) if raw_max > 0 else 0.0
     c_qty = int(round(scale * norm_qty))
@@ -461,6 +456,9 @@ def allocate(
 
   # Solve
   solver = cp_model.CpSolver()
+  # Apply time limit parameter (OR-Tools: CpSolverParameters.max_time_in_seconds)
+  # https://developers.google.com/optimization/reference/python/sat/python/cp_model#cpsolverparameters
+  solver.parameters.max_time_in_seconds = max_time_seconds
   status = solver.Solve(model)
 
   allocations: List[AllocationRow] = []
@@ -474,7 +472,7 @@ def allocate(
     # Extract placements
     for k_idx, (order_idx, item) in enumerate(items):
       qty = int(item.get("quantity", 0))
-      if k_idx in skipped_indices or qty == 0:
+      if k_idx in skipped_indices:
         continue
       cands = compatible_plants[k_idx]
       if k_idx in placed and solver.Value(placed[k_idx]) == 1:
@@ -554,7 +552,8 @@ def allocate(
   # Missing items count: items not appearing in any of the three output lists
   # (allocated, skipped, unallocated). Should normally be 0; non-zero indicates
   # a reporting or classification gap.
-  "missing_items_count": len(items) - (len(allocations) + len(skipped) + len(unallocated)),
+  "missing_items_count": len(items) - (len(allocations) + len(skipped) + len(unallocated) + len(zero_quantity_items)),
+      "zero_quantity_items_count": len(zero_quantity_items),
       # Per-plant utilization diagnostics
       "plant_utilization": [
         {
@@ -579,6 +578,9 @@ def allocate(
         "gap_abs": gap_abs,
         "gap_rel": gap_rel,
       },
+      "solver_parameters": {
+        "max_time_seconds": max_time_seconds,
+      },
       # Urgency diagnostics (raw per-item data for transparency)
       "diagnostics": {
         "item_days": item_days,
@@ -588,7 +590,8 @@ def allocate(
       },
     },
     "allocations": allocations,
-    "skipped": skipped,
-    "unallocated": unallocated,
+  "skipped": skipped,
+  "unallocated": unallocated,
+  "zero_quantity_items": zero_quantity_items,
   }
   return result
