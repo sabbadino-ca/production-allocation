@@ -162,5 +162,22 @@ class TestDataLoader(unittest.TestCase):
         self.assertIn("Item quantity must be >= 0", str(context.exception))
         self.assertIn("got -5", str(context.exception))
 
+    def test_horizon_days_zero_rejected(self) -> None:
+        """horizon_days == 0 should raise ValueError via centralized validation."""
+        plants: List[Plant] = [
+            {"plantid": 1, "plantfamily": "F1", "capacity": 100, "allowedModels": ["M1"]},
+        ]
+        items: List[Item] = [
+            {"modelFamily": "F1", "model": "M1", "submodel": "S1", "quantity": 10},
+        ]
+        orders: List[Order] = [
+            {"order": "O1", "dueDate": "2025-01-01", "items": items},
+        ]
+        settings: WeightsConfig = {"w_quantity": 5.0, "w_due": 1.0, "horizon_days": 0}
+        with self.assertRaises(ValueError) as ctx:
+            validate_input_data(plants, orders, settings)
+        self.assertIn("horizon_days", str(ctx.exception))
+        self.assertIn(">= 1", str(ctx.exception))
+
 if __name__ == '__main__':
     unittest.main()

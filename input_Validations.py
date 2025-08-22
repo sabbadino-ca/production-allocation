@@ -128,4 +128,12 @@ def validate_settings_payload(data: dict) -> tuple[float, float]:
     raise ValueError("w_quantity and w_due must be numeric.")
   if w_quantity < 0 or w_due < 0:
     raise ValueError("w_quantity and w_due must be non-negative.")
+  # Optional horizon_days validation centralized here (must be >=1 if provided)
+  if "horizon_days" in data:
+    try:
+      horizon_val = int(data["horizon_days"])
+    except Exception:
+      raise ValueError("horizon_days must be an integer >= 1")
+    if horizon_val < 1:
+      raise ValueError("horizon_days must be >= 1 (received 0)")
   return w_quantity, w_due

@@ -131,6 +131,18 @@ class TestAllocate(unittest.TestCase):
         self.assertEqual(len(res["skipped"]), 0)
         self.assertEqual(res["summary"]["total_demand"], 0)
 
+    def test_default_horizon_days_used(self) -> None:
+        plants = [
+            _plant(1, 100, ["M1"]),
+        ]
+        orders = [
+            _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
+        ]
+        # Omit horizon_days in weights
+        res = allocate(plants, orders, self.current_date, {"w_quantity":5.0, "w_due":1.0})
+        self.assertIn("diagnostics", res["summary"])
+        self.assertEqual(res["summary"]["diagnostics"]["horizon_days"], 30)
+
     def test_incompatible_zero_quantity_item_is_skipped(self) -> None:
         plants = [
             _plant(1, 100, ["M1"]),  # Does NOT allow M2

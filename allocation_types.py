@@ -31,6 +31,24 @@ class SkippedRow(TypedDict):
         reason: Literal["no_compatible_plant", "too_large_for_any_plant"]
 
 
+class ObjectiveComponents(TypedDict):
+    """Integer objective component breakdown (scaled)."""
+    quantity_component: int
+    due_component: int
+    int_w_quantity: int
+    int_w_due: int
+    scale: int
+    weight_precision: int
+
+
+class ObjectiveBoundMetrics(TypedDict):
+    """Solver-reported objective value and bound/gap metrics."""
+    objective_value: float | None
+    best_objective_bound: float | None
+    gap_abs: float | None
+    gap_rel: float | None
+
+
 class Summary(TypedDict):
     """Aggregated statistics about the modeled instance and solve status."""
     plants_count: int
@@ -42,7 +60,28 @@ class Summary(TypedDict):
     skipped_count: int
     skipped_demand: int
     status: str
-    objective_components: dict[str, int]
+    objective_components: ObjectiveComponents
+    objective_bound_metrics: ObjectiveBoundMetrics
+    total_allocated_quantity: int
+    allocated_ratio: float
+    plant_utilization: List["PlantUtilizationRow"]
+    diagnostics: "Diagnostics"
+
+
+class PlantUtilizationRow(TypedDict):
+    """Per-plant capacity usage diagnostic."""
+    plantid: int
+    capacity: int
+    used_capacity: int
+    utilization_pct: float
+
+
+class Diagnostics(TypedDict):
+    """Urgency-related diagnostic arrays for transparency."""
+    item_days: List[int]
+    normalized_urgencies: List[float]
+    max_overdue_days: int
+    horizon_days: int
 
 
 class UnallocatedRow(TypedDict):
@@ -63,18 +102,26 @@ class AllocateResult(TypedDict):
     unallocated: List[UnallocatedRow]
 
 
-class WeightsConfig(TypedDict, total=False):
-        """Weight configuration for objective components.
+class _WeightsConfigRequired(TypedDict):
+    """Required weight keys.
 
-        Fields:
-            w_quantity: Weight applied to quantity component (>=0).
-            w_due: Weight applied to due-date urgency component (>=0).
-            horizon_days: Planning horizon for urgency decay (default 30 if omitted).
-            scale: Scaling factor for normalized components (default 1000).
-            weight_precision: Integer precision multiplier for weights (default 1).
-        """
-        w_quantity: float
-        w_due: float
-        horizon_days: int
-        scale: int
-        weight_precision: int
+    These are mandatory for building the objective.
+    """
+    w_quantity: float
+    w_due: float
+
+
+class WeightsConfig(_WeightsConfigRequired, total=False):
+    """Weight configuration for objective components.
+
+    Required:
+        w_quantity: Weight applied to quantity component (>=0).
+        w_due: Weight applied to due-date urgency component (>=0).
+    Optional:
+        horizon_days: Planning horizon for urgency decay (>=1, default 30).
+        scale: Scaling factor for normalized components (default 1000).
+        weight_precision: Integer precision multiplier for weights (default 1).
+    """
+    horizon_days: int
+    scale: int
+    weight_precision: int
