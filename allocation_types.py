@@ -50,20 +50,36 @@ class ObjectiveBoundMetrics(TypedDict):
 
 
 class Summary(TypedDict):
-    """Aggregated statistics about the modeled instance and solve status."""
+    """Aggregated statistics about the modeled instance and solve status.
+
+    Added fields (2025-08) for improved reconciliation transparency:
+        total_input_items: Count of all items parsed from input orders (including zero-qty & those later skipped).
+        allocated_items_count: Number of rows in allocations list.
+        unallocated_items_count: Number of modeled items that remained unallocated.
+        total_output_reported_items: allocations + skipped + unallocated lengths (coverage measure).
+        missing_items_excluding_unallocated: total_input_items - (allocated_items_count + skipped_count);
+            highlights items that disappeared because they were zero quantity or filtered out in logic but not classified.
+        missing_items_count: total_input_items - (allocated_items_count + skipped_count + unallocated_items_count);
+            should normally be 0; non‑zero indicates a reporting gap.
+    """
     plants_count: int
     orders_count: int
     unique_models_count: int
+    total_input_items: int
     total_capacity: int
     total_demand: int
     capacity_minus_demand: int
     skipped_count: int
     skipped_demand: int
     status: str
+    allocated_items_count: int
+    unallocated_items_count: int
     objective_components: ObjectiveComponents
     objective_bound_metrics: ObjectiveBoundMetrics
     total_allocated_quantity: int
     allocated_ratio: float
+    total_output_reported_items: int
+    missing_items_count: int
     plant_utilization: List["PlantUtilizationRow"]
     diagnostics: "Diagnostics"
 
@@ -95,7 +111,16 @@ class UnallocatedRow(TypedDict):
 
 
 class AllocateResult(TypedDict):
-    """Result container for allocate()."""
+    """Result container for allocate().
+
+    Keys:
+        summary: Summary metrics (see Summary for detailed field list).
+        allocations: Full-quantity placements.
+        skipped: Items structurally omitted (no decision vars).
+        unallocated: Modeled items not placed due to capacity competition.
+
+    Note: Reconciliation fields now permit end-to-end item accounting.
+    """
     summary: Summary
     allocations: List[AllocationRow]
     skipped: List[SkippedRow]

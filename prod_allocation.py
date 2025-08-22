@@ -536,6 +536,8 @@ def allocate(
       "plants_count": len(plants),
       "orders_count": orders_count,
       "unique_models_count": len(unique_models),
+  # Item-level accounting
+  "total_input_items": len(items),
       "total_capacity": total_capacity,
       "total_demand": total_demand,
       "capacity_minus_demand": total_capacity - total_demand,
@@ -543,8 +545,16 @@ def allocate(
       "skipped_demand": sum(int(s.get("quantity", 0)) for s in skipped),
   "status": solver.StatusName(),
       # Allocation outcome KPIs
+  "allocated_items_count": len(allocations),
       "total_allocated_quantity": sum(a["allocated_qty"] for a in allocations),
       "allocated_ratio": (sum(a["allocated_qty"] for a in allocations) / total_demand) if total_demand > 0 else 0.0,
+  # Output coverage diagnostics
+  "unallocated_items_count": len(unallocated),
+  "total_output_reported_items": len(allocations) + len(skipped) + len(unallocated),
+  # Missing items count: items not appearing in any of the three output lists
+  # (allocated, skipped, unallocated). Should normally be 0; non-zero indicates
+  # a reporting or classification gap.
+  "missing_items_count": len(items) - (len(allocations) + len(skipped) + len(unallocated)),
       # Per-plant utilization diagnostics
       "plant_utilization": [
         {

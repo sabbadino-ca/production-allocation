@@ -9,6 +9,11 @@
                     "model": "model1",
                     "submodel" : "submodel11",
                     "quantity": 50
+                }, {
+                    "modelFamily": "family1",
+                    "model": "model1",
+                    "submodel" : "submodel13",
+                    "quantity": 0
                 },
                 {
                     "modelFamily": "family1",
