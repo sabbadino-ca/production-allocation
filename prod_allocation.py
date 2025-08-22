@@ -35,6 +35,12 @@ def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
 
   Raises:
     ValueError: If data does not meet schema expectations.
+
+  Rules enforced (integer policy update):
+    - Plant capacity must be a non-negative integer (floats that are not whole
+      numbers are rejected).
+    - Item quantity must be a non-negative integer (floats that are not whole
+      numbers are rejected).
   """
   # Validate plants data
   if not isinstance(plants, list):
@@ -47,6 +53,14 @@ def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
       raise ValueError(f"allowedModels must be a list in: {plant}")
     if len(plant["allowedModels"]) < 1:
       raise ValueError(f"allowedModels must contain at least one item in: {plant}")
+    # Capacity integer & non-negative validation
+    capacity_val = plant.get("capacity")
+    if not isinstance(capacity_val, (int, float)):
+      raise ValueError(f"Plant capacity must be numeric (plantid={plant.get('plantid')})")
+    if isinstance(capacity_val, float) and not capacity_val.is_integer():
+      raise ValueError(f"Plant capacity must be an integer (plantid={plant.get('plantid')} got {capacity_val})")
+    if int(capacity_val) < 0:
+      raise ValueError(f"Plant capacity must be >= 0 (plantid={plant.get('plantid')} got {capacity_val})")
 
   # Validate orders data  
   if not isinstance(orders, list):
@@ -67,7 +81,11 @@ def validate_input_data(plants: List[Plant], orders: List[Order]) -> None:
         raise ValueError(f"Missing required item fields in: {item}")
       # Validate quantity is non-negative
       quantity = item.get("quantity", 0)
-      if not isinstance(quantity, (int, float)) or quantity < 0:
+      if not isinstance(quantity, (int, float)):
+        raise ValueError(f"Item quantity must be numeric but got {type(quantity)} in: {item}")
+      if isinstance(quantity, float) and not quantity.is_integer():
+        raise ValueError(f"Item quantity must be an integer (got {quantity}) in: {item}")
+      if int(quantity) < 0:
         raise ValueError(f"Item quantity must be >= 0 but got {quantity} in: {item}")
 
 
