@@ -88,7 +88,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
 
         self.assertIn("summary", res)
         self.assertIn("allocations", res)
@@ -107,7 +107,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 5)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
 
         # Item should be skipped
         self.assertEqual(res["skipped"][0]["reason"], "no_compatible_plant")
@@ -124,7 +124,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         # Zero quantity with compatible plant: no allocation, not skipped
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 0)
@@ -137,7 +137,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M2", "Sx", 0)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 1)
         self.assertEqual(res["skipped"][0]["reason"], "no_compatible_plant")
@@ -151,7 +151,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 6)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         self.assertEqual(len(res["allocations"]), 0)
         self.assertEqual(len(res["skipped"]), 1)
         self.assertEqual(res["skipped"][0]["reason"], "too_large_for_any_plant")
@@ -166,7 +166,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 4), _item("M2", "S2", 6)], datetime.now().strftime("%Y-%m-%d")),
             _order("O2", [_item("M2", "S3", 5), _item("M3", "S4", 3)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
 
         # All items have at least one compatible plant, so no skipped
         self.assertEqual(res["summary"]["skipped_count"], 0)
@@ -186,7 +186,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 5)], datetime.now().strftime("%Y-%m-%d")),
             _order("O2", [_item("M2", "S2", 8)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
 
         self.assertEqual(res["summary"]["plants_count"], 2)
         self.assertEqual(res["summary"]["orders_count"], 2)
@@ -212,7 +212,7 @@ class TestAllocate(unittest.TestCase):
                 _item("M1", "S3", 2),
             ], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
 
         self.assertIn(res["summary"]["status"], {"OPTIMAL", "FEASIBLE"})
         total_alloc = sum(a["allocated_qty"] for a in res["allocations"])
@@ -233,7 +233,7 @@ class TestAllocate(unittest.TestCase):
         orders = [
             _order("O1", [_item("M1", "S1", 10)], datetime.now().strftime("%Y-%m-%d")),
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
 
         self.assertIn(res["summary"]["status"], {"OPTIMAL", "FEASIBLE"})
         # Single item quantity=10 cannot be partially placed; expect 0 allocated
@@ -256,7 +256,7 @@ class TestAllocate(unittest.TestCase):
             _order("O2", [_item("M1", "S2", 5)], future_near), # 4 days in future
             _order("O3", [_item("M1", "S3", 5)], future_far),  # 9 days in future
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         
         # Only past due item should be allocated
         self.assertEqual(len(res["allocations"]), 1)
@@ -281,7 +281,7 @@ class TestAllocate(unittest.TestCase):
             _order("O2", [_item("M1", "S2", 5)], overdue_11), # 11 days overdue (higher priority)
             _order("O3", [_item("M1", "S3", 5)], overdue_3),  # 3 days overdue
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         
         # Most overdue item should be allocated
         self.assertEqual(len(res["allocations"]), 1)
@@ -303,7 +303,7 @@ class TestAllocate(unittest.TestCase):
             _order("O2", [_item("M1", "S2", 5)],future_4),  # 4 days away (higher priority)
             _order("O3", [_item("M1", "S3", 5)],future_15), # 15 days away
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         
         # Closest due date should be allocated
         self.assertEqual(len(res["allocations"]), 1)
@@ -323,7 +323,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 5)], future_far),  # 20 days away (lower priority)
             _order("O2", [_item("M1", "S2", 5)], future_near),  # 4 days away (higher priority)
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         
         # Near future item should be allocated over far future item
         self.assertEqual(len(res["allocations"]), 1)
@@ -343,7 +343,7 @@ class TestAllocate(unittest.TestCase):
             _order("O1", [_item("M1", "S1", 10)], overdue_11), # 11 days overdue, qty 10
             _order("O2", [_item("M1", "S2", 5)], future_4),    # 4 days future, qty 5
         ]
-        res = allocate(plants, orders, self.current_date)
+        res = allocate(plants, orders, self.current_date, 5.0, 1.0)
         
         # Both should be allocated since capacity allows
         self.assertEqual(len(res["allocations"]), 2)

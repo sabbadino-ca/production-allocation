@@ -5,7 +5,7 @@ Provides typed loaders that return domain-typed structures defined in
 `domain_types` (Plant, Order, Item).
 """
 import json
-from typing import List, cast
+from typing import List, cast, Tuple, Any, Dict
 import os
 from domain_types import Plant, Order
 
@@ -75,3 +75,49 @@ def load_orders(path: str) -> List[Order]:
             if not all(k in item for k in ("modelFamily", "model", "submodel", "quantity")):
                 raise ValueError(f"Missing required item fields in: {item}")
     return cast(List[Order], data["orders"])
+
+
+def load_settings(path: str) -> Tuple[float, float]:
+    """Load optimization weighting settings.
+
+    Expects a JSON object containing at least the keys:
+      - "w_quantity" (number >= 0)
+      - "w_due" (number >= 0)
+
+    Example JSON:
+    {
+      "w_quantity": 5.0,
+      "w_due": 1.0
+    }
+
+    Args:
+        path: Path to a JSON settings file.
+
+    Returns:
+        Tuple (w_quantity, w_due) as floats.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If required keys are missing or invalid.
+    """
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Settings file not found: {path}")
+    with open(path, 'r', encoding='utf-8') as f:
+        try:
+            data: Dict[str, Any] = json.load(f)
+        except Exception as e:
+            raise ValueError(f"Failed to parse settings JSON: {e}")
+
+    if not isinstance(data, dict):
+        raise ValueError("Settings file must contain a JSON object.")
+    missing = [k for k in ("w_quantity", "w_due") if k not in data]
+    if missing:
+        raise ValueError(f"Settings file missing keys: {missing}")
+    try:
+        w_quantity = float(data["w_quantity"])
+        w_due = float(data["w_due"])
+    except Exception:
+        raise ValueError("w_quantity and w_due must be numeric.")
+    if w_quantity < 0 or w_due < 0:
+        raise ValueError("w_quantity and w_due must be non-negative.")
+    return w_quantity, w_due

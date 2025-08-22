@@ -42,6 +42,7 @@ class Summary(TypedDict):
     skipped_count: int
     skipped_demand: int
     status: str
+    objective_components: dict[str, int]
 
 
 class UnallocatedRow(TypedDict):

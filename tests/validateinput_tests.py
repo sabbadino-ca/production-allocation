@@ -138,7 +138,7 @@ class TestDataLoader(unittest.TestCase):
         current_date = datetime(2025, 8, 21)
         
         with self.assertRaises(ValueError) as context:
-            allocate(plants, orders, current_date)
+            allocate(plants, orders, current_date, 5.0, 1.0)
         
         self.assertIn("Item quantity must be >= 0", str(context.exception))
         self.assertIn("got -5", str(context.exception))

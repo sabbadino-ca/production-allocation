@@ -4,7 +4,7 @@ Requires two input file paths as command line arguments.
 """
 import argparse
 from datetime import datetime
-from data_loader import load_plants, load_orders
+from data_loader import load_plants, load_orders, load_settings
 from typing import List
 from domain_types import Plant, Order
 from prod_allocation import allocate
@@ -13,6 +13,7 @@ def main():
     parser = argparse.ArgumentParser(description="Production Allocation Optimizer")
     parser.add_argument('--plants', required=True, help='Path to plants info JSON file')
     parser.add_argument('--orders', required=True, help='Path to orders JSON file')
+    parser.add_argument('--settings', required=True, help='Path to JSON settings file containing w_quantity and w_due')
     args = parser.parse_args()
 
     plants: List[Plant] = load_plants(args.plants)
@@ -20,7 +21,9 @@ def main():
 
     print(f"Loaded {len(plants)} plants and {len(orders)} orders.")
     current_date = datetime.now()
-    result = allocate(plants, orders, current_date)
+    w_quantity, w_due = load_settings(args.settings)
+    print(f"Loaded weights -> w_quantity={w_quantity}, w_due={w_due}")
+    result = allocate(plants, orders, current_date, w_quantity, w_due)
     
     # Print summary
     summary = result.get("summary", {})

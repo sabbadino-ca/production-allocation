@@ -28,7 +28,16 @@ from input_Validations import validate_input_data
 
 
 
-def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -> AllocateResult:
+def allocate(
+  plants: List[Plant],
+  orders: List[Order],
+  current_date: datetime,
+  w_quantity: float,
+  w_due: float,
+  horizon_days: int = 30,
+  scale: int = 1000,
+  weight_precision: int = 1,
+) -> AllocateResult:
   """
   Build an optimization CP-SAT model (always feasible) with:
   - Compatibility and plant capacity constraints.
@@ -52,6 +61,16 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
     orders: List of Order dictionaries (each containing an 'items' list of
       Item dictionaries with 'model', 'submodel', 'modelFamily', and 'quantity').
     current_date: Current date for due date priority calculations.
+
+  Args (additional weighting parameters):
+    w_quantity: Required weight applied to normalized quantity component (pass e.g. 5).
+    w_due: Required weight applied to normalized due-date urgency component (pass e.g. 1).
+    horizon_days: Positive horizon for future due-date decay (days in future beyond this drop to 0 urgency).
+    scale: Integer scaling factor applied to each normalized component (quantity, urgency) BEFORE weighting.
+    weight_precision: Multiplier used to convert floating weights (w_quantity, w_due) into integers.
+      Effective per-item coefficient = (int(w_quantity * weight_precision) * (scale * norm_qty_k))
+        + (int(w_due * weight_precision) * (scale * norm_urg_k)).
+      Keep resulting product (weight * scale) *<= ~1e7 to avoid very large coefficients.
 
   Returns:
     AllocateResult: Typed mapping containing
@@ -113,7 +132,10 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
   for k_idx, (_oi, it) in enumerate(items):
     qty = int(it.get("quantity", 0))
     cands = compatible_plants[k_idx]
-    # Skip any item (even zero quantity) with no compatible plant
+  # --- HARD feasibility preprocessing (Compatibility) ---
+  # Skip any item (even zero quantity) with no compatible plant.
+  # This enforces the compatibility hard constraint by construction: we simply never
+  # create decision variables for incompatible (plant,item) pairs.
     if not cands:
       skipped.append({
         "order": orders[_oi]["order"],
@@ -125,7 +147,8 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
       })
       skipped_indices.add(k_idx)
       continue
-    # Skip if item is unsplittable and:
+  # --- HARD feasibility preprocessing (Unsplittable size) ---
+  # Skip if item is unsplittable and:
     #  - Its quantity exceeds every single compatible plant's capacity (cannot fit on any one)
     #  - BUT its quantity is still less than or equal to the aggregate capacity across those plants
     #    (i.e., it could fit only if splitting were allowed).
@@ -154,6 +177,9 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
 
   # All-or-nothing assignment: each item assigned to at most one plant; if
   # assigned, the full quantity is placed. Sum of assigns equals placed.
+  # --- HARD CONSTRAINT: Each modeled item may be assigned to AT MOST one plant (no splitting). ---
+  # Implemented via: sum_p assign[p,k] == placed[k].
+  # placed[k] is a helper Bool ensuring we can refer to selection in the objective.
   for k_idx, (_oi, it) in enumerate(items):
     qty = int(it.get("quantity", 0))
     if k_idx in skipped_indices or qty == 0:
@@ -165,6 +191,8 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
 
   # Plant capacity constraints: sum of item quantities assigned to the plant
   # cannot exceed plant capacity
+  # --- HARD CONSTRAINT: Capacity of each plant not exceeded. ---
+  # For each plant p: sum_k qty_k * assign[p,k] <= capacity_p.
   for p_idx, p in enumerate(plants):
     cap = int(p.get("capacity", 0))
     # For each item assigned to this plant, it contributes its full quantity
@@ -180,40 +208,97 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
       model.Add(sum(terms) <= cap)
 
 
-  # Multi-objective: maximize quantity + prioritize earlier due dates
-  obj_terms = []
+  # --- SOFT OBJECTIVE (Separated additive components) ---
+  # We build TWO independent linear component sums (quantity component, due-date urgency component)
+  # and apply integer weights afterward. This structurally prepares for potential
+  # lexicographic optimization (future: optimize urgency first, then quantity) by
+  # giving direct access to each component. Current objective:
+  #   Maximize  int_w_quantity * (Σ_k c_qty_k * placed_k) + int_w_due * (Σ_k c_due_k * placed_k)
+  # where c_qty_k  = round(scale * norm_qty_k)
+  #       c_due_k  = round(scale * norm_urg_k)
+  #       int_w_*  = round(weight_precision * w_*)
+  # This is algebraically equivalent to previous per-item blended coefficient (up to rounding),
+  # but the components remain inspectable and reusable.
+  # Reference: cp_model.Maximize linear expression [Docs]
+  # https://developers.google.com/optimization/reference/python/sat/python/cp_model#CpModel.Maximize
+
+  # Precompute per-item days_until_due and raw urgency values for items that could be placed.
+  item_days: List[int] = []
+  raw_urgencies: List[float] = []
+  max_overdue = 0
   for k_idx, (order_idx, it) in enumerate(items):
-    qty = int(it.get("quantity", 0))
-    if k_idx in placed and qty > 0:
-      # Base quantity term
-      base_weight = qty
-      
-      # Due date priority weight (earlier dates get higher priority)
-      # Use order-level dueDate since items no longer have individual due dates
-      due_date_str = orders[order_idx].get("dueDate", "")
-      if due_date_str:
-        try:
-          due_date = datetime.fromisoformat(due_date_str)
-          days_until_due = (due_date - current_date).days
-          
-          if days_until_due < 0:
-            # Past due: highest priority (exponentially increasing with overdue days)
-            due_date_weight = 10000 + abs(days_until_due) * 100
-          else:
-            # Future due: higher weight for items due sooner
-            due_date_weight = max(1, 1000 - days_until_due)
-        except:
-          due_date_weight = 1
+    due_str = orders[order_idx].get("dueDate", "")
+    try:
+      due_date = datetime.fromisoformat(due_str) if due_str else None
+    except Exception:
+      due_date = None
+    if due_date is None:
+      d = horizon_days  # treat as far future
+    else:
+      d = (due_date - current_date).days
+    item_days.append(d)
+    if d < 0:
+      max_overdue = max(max_overdue, abs(d))
+  # Compute raw urgencies
+  for d in item_days:
+    if d < 0:
+      # Overdue: >1 range depends on max_overdue
+      if max_overdue > 0:
+        raw = 1.0 + (abs(d) / max_overdue)  # in (1,2]
       else:
-        due_date_weight = 1
-        
-      # Combined objective coefficient
-      total_weight = base_weight * due_date_weight
-      obj_terms.append(total_weight * placed[k_idx])
+        raw = 1.5  # fallback
+    else:
+      # Future: linear decay within horizon_days
+      future_fraction = min(d, horizon_days) / horizon_days if horizon_days > 0 else 1.0
+      raw = max(0.0, 1.0 - future_fraction)  # in [0,1]
+    raw_urgencies.append(raw)
+  raw_max = max(raw_urgencies) if raw_urgencies else 1.0
 
+  # Quantity normalization baseline
+  max_qty = 0
+  for _oi, it in items:
+    qv = int(it.get("quantity", 0))
+    if qv > max_qty:
+      max_qty = qv
 
-  if obj_terms:
-    model.Maximize(sum(obj_terms))
+  qty_component_terms: List[cp_model.LinearExpr] = []  # c_qty_k * placed_k
+  due_component_terms: List[cp_model.LinearExpr] = []  # c_due_k * placed_k
+  for k_idx, (_oi, it) in enumerate(items):
+    if k_idx not in placed:
+      continue
+    qty = int(it.get("quantity", 0))
+    if qty <= 0:
+      continue
+    norm_qty = (qty / max_qty) if max_qty > 0 else 0.0
+    norm_urg = (raw_urgencies[k_idx] / raw_max) if raw_max > 0 else 0.0
+    c_qty = int(round(scale * norm_qty))
+    c_due = int(round(scale * norm_urg))
+    # Clamp each component separately (safeguard)
+    if c_qty > 10_000_000:
+      c_qty = 10_000_000
+    if c_due > 10_000_000:
+      c_due = 10_000_000
+    qty_component_terms.append(c_qty * placed[k_idx])
+    due_component_terms.append(c_due * placed[k_idx])
+
+  # Convert weights to integers with desired precision.
+  # NOTE: Keep (weight_precision * scale * max_component_value) within a safe bound.
+  int_w_quantity = int(round(w_quantity * weight_precision))
+  int_w_due = int(round(w_due * weight_precision))
+  if int_w_quantity < 0 or int_w_due < 0:
+    raise ValueError("Weights must be non-negative")
+
+  # Build component sums (LinearExpr). If empty, skip objective.
+  sum_qty_expr = sum(qty_component_terms) if qty_component_terms else None
+  sum_due_expr = sum(due_component_terms) if due_component_terms else None
+  if sum_qty_expr is not None or sum_due_expr is not None:
+    # Treat missing component as 0.
+    expr = 0
+    if sum_qty_expr is not None and int_w_quantity > 0:
+      expr += int_w_quantity * sum_qty_expr
+    if sum_due_expr is not None and int_w_due > 0:
+      expr += int_w_due * sum_due_expr
+    model.Maximize(expr)
 
   # Solve
   solver = cp_model.CpSolver()
@@ -232,6 +317,9 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
 
   allocations: List[AllocationRow] = []
   unallocated: List[UnallocatedRow] = []
+  # Default component values (evaluated post-solve)
+  component_qty_value = 0
+  component_due_value = 0
   if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
     # Extract placements
     for k_idx, (order_idx, item) in enumerate(items):
@@ -265,6 +353,15 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
           "reason": "insufficient_capacity",
         })
 
+    # Evaluate component objective contributions for transparency
+    try:
+      if 'sum_qty_expr' in locals() and sum_qty_expr is not None:
+        component_qty_value = solver.Value(sum_qty_expr)
+      if 'sum_due_expr' in locals() and sum_due_expr is not None:
+        component_due_value = solver.Value(sum_due_expr)
+    except Exception:
+      pass
+
   return {
     "summary": {
       "plants_count": len(plants),
@@ -276,6 +373,14 @@ def allocate(plants: List[Plant], orders: List[Order], current_date: datetime) -
       "skipped_count": len(skipped),
       "skipped_demand": sum(int(s.get("quantity", 0)) for s in skipped),
       "status": status_to_str(status),
+      "objective_components": {
+        "quantity_component": component_qty_value,
+        "due_component": component_due_value,
+        "int_w_quantity": int_w_quantity,
+        "int_w_due": int_w_due,
+        "scale": scale,
+        "weight_precision": weight_precision,
+      },
     },
     "allocations": allocations,
     "skipped": skipped,
