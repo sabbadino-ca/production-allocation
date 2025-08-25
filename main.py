@@ -16,7 +16,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     plant_names, plant_quantity_capacities, allowed_model_names_per_plant = load_plants_arrays(args.plants_file)
-    item_names, model_names, quantities, due_date_boosts = load_items_arrays(args.items_file)
+    item_names, model_names, quantities, due_date_boosts, order_ids = load_items_arrays(args.items_file)
 
     # Per-item additive objectives (family of sums)
     specs = [
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         plants_quantity_capacities=plant_quantity_capacities,
         allowed_model_names_per_plant=allowed_model_names_per_plant,
         additive_objectives=specs,
-        w_group=1.2,   # grouping penalty on
+        w_model_name_group=1.2,   # grouping penalty on
         w_plants=1.0,  # prefer fewer plants
         min_allowed_qty_of_items_same_model_name_in_a_plant=0,  # HARD min OFF
         soft_min_qty_of_items_same_model_name_in_a_plant=6,     # SOFT min = 6

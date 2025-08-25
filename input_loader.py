@@ -81,8 +81,8 @@ def load_plants_arrays(plants_file: str | Path) -> Tuple[List[str], List[int], L
 	return plant_names, plant_quantity_capacities, allowed_model_names_per_plant
 
 
-def load_items_arrays(items_file: str | Path) -> Tuple[List[str], List[str], List[int], List[int]]:
-	"""Load items from JSON and produce arrays for the optimizer, including due date boosts.
+def load_items_arrays(items_file: str | Path) -> Tuple[List[str], List[str], List[int], List[int], List[str]]:
+	"""Load items from JSON and produce arrays for the optimizer, including due date boosts and order IDs.
 
 	Parameters
 	----------
@@ -98,13 +98,14 @@ def load_items_arrays(items_file: str | Path) -> Tuple[List[str], List[str], Lis
 
 		Returns
 		-------
-		Tuple[List[str], List[str], List[int], List[int]]
+		Tuple[List[str], List[str], List[int], List[int], List[str]]
 				- item_names: unique item labels
 				- model_names: per item, as "{modelFamily}_{model}_{submodel}"
 				- item_quantities: per item quantity (int)
 				- due_date_boosts: per item integer boost in [0, 100], linearly mapped from due dates
 					with 100 when due date is 100 days overdue (now - 100), 0 when due date is 100 days ahead (now + 100),
 					and 50 when due date is today.
+				- order_ids: per item order identifier (stringified), matching the order's "order" field
 
 	Raises
 	------
@@ -150,6 +151,7 @@ def load_items_arrays(items_file: str | Path) -> Tuple[List[str], List[str], Lis
 	model_names: List[str] = []
 	item_quantities: List[int] = []
 	due_date_boosts: List[int] = []
+	order_ids: List[str] = []
 
 	seq = 0
 	for oi, order in enumerate(orders):
@@ -164,6 +166,10 @@ def load_items_arrays(items_file: str | Path) -> Tuple[List[str], List[str], Lis
 		items = order.get("items")
 		if not isinstance(items, list):
 			raise ValueError(f"Order at index {oi} must have 'items' list.")
+
+		# Normalize order id to string; tolerate missing by using empty string
+		ord_id_raw = order.get("order")
+		ord_id = str(ord_id_raw) if ord_id_raw is not None else ""
 
 		for ii, it in enumerate(items):
 			if not isinstance(it, dict):
@@ -191,5 +197,6 @@ def load_items_arrays(items_file: str | Path) -> Tuple[List[str], List[str], Lis
 			model_names.append(model_name)
 			item_quantities.append(qty)
 			due_date_boosts.append(boost_val)
+			order_ids.append(ord_id)
 
-	return item_names, model_names, item_quantities, due_date_boosts
+	return item_names, model_names, item_quantities, due_date_boosts, order_ids

@@ -1,5 +1,6 @@
 import json
 from datetime import date, timedelta
+from os import path
 from pathlib import Path
 import tempfile
 import unittest
@@ -48,7 +49,7 @@ class TestItemsLoaderDueDateBoosts(unittest.TestCase):
             d_ahead_150, # clamp -> 0
         ])
 
-        _, _, _, boosts = load_items_arrays(path)
+        _, _, _, boosts, _ = load_items_arrays(path)
         self.assertEqual(boosts, [100, 50, 0, 100, 0])
 
 

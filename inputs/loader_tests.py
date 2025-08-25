@@ -61,7 +61,7 @@ class TestDueDateBoost(unittest.TestCase):
 
         path, tmpctx = _write_items_file(dates)
         try:
-            _, _, _, boosts = load_items_arrays(path)
+            _, _, _, boosts, _ = load_items_arrays(path)
             self.assertEqual(boosts, [100, 50, 0, 100, 0])
         finally:
             tmpctx.cleanup()

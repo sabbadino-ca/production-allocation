@@ -47,7 +47,7 @@ def optimize_plants_assignment(
     # --- Additive objectives (per-item sums) ---
     additive_objectives: List[ObjectiveSpec],
     # --- Structural weights (linear counts) ---
-    w_group: float = 1.0,                           # minimize model_names splitting: Σ z - Σ u
+    w_model_name_group: float = 1.0,                           # minimize model_names splitting: Σ z - Σ u
     w_plants: float = 0.0,                          # minimize plants used: Σ y
     # --- HARD minimum total quantity per (name, plant) ---
     min_allowed_qty_of_items_same_model_name_in_a_plant: int = 0,  # 0 disables hard min
@@ -335,7 +335,7 @@ def optimize_plants_assignment(
         c = int(round(K * weight / max(1, denom_posint)))
         return max(1, c)
 
-    c_group  = _coef(w_group,  extra_plants_max)
+    c_group  = _coef(w_model_name_group,  extra_plants_max)
     c_plants = _coef(w_plants, plants_used_max)
 
     # SOFT shortfall-only penalty (per allowed (model name , plant))
