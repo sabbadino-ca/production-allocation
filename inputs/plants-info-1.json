@@ -1,6 +1,6 @@
 [
-{ "plantid": 1 , "plantfamily" : "family1" , "capacity": 100 
+{ "plant_name": 1 ,  "plant_quantity_capacity": 100
 , "allowedModels" : [ "model1", "model2" ] },
-{ "plantid": 2 , "plantfamily" : "family1" , "capacity": 50 , "allowedModels" : [ "model1" ] },
-{ "plantid": 3 , "plantfamily" : "family2" , "capacity": 100 , "allowedModels" : [ "model3" ] }
+{ "plant_name": 2 ,  "plant_quantity_capacity": 50 , "allowedModels" : [ "model1" ] },
+{ "plant_name": 3 ,"plant_quantity_capacity": 100 , "allowedModels" : [ "model3" ] }
 ]

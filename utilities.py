@@ -38,9 +38,9 @@ def _fractional_knapsack_ub(values: Sequence[int], quantities: Sequence[int], ca
     return float(free) + ub
 
 
-def _group_names_by_model_family(indices: List[int], model_families: List[str], names: List[str]) -> Dict[str, List[str]]:
-    """Helper for reporting: group item names by their model_family."""
+def _group_names_by_model_name(indices: List[int], model_names: List[str], names: List[str]) -> Dict[str, List[str]]:
+    """Helper for reporting: group item names by their model_name."""
     out = defaultdict(list)
     for i in indices: # type: ignore
-        out[model_families[i]].append(names[i])
+        out[model_names[i]].append(names[i])
     return dict(out)

@@ -8,7 +8,7 @@ Primary mission
    * input data: 
    - available plants to allocate items productions. Each plant has following attributes:
      - items production capacity
-     - what items it can produce
+     - what items it can produce 
      - a family group it belongs to
    - available items to be produced : Each item has following attributes:
       - modelFamily
