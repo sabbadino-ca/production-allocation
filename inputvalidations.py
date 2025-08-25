@@ -38,6 +38,7 @@ def validate_input(
 	item_names: List[str],
 	model_names: List[str],
 	item_quantities: List[int],
+	order_ids: List[str],
 	plant_names: List[str],
 	plant_quantity_capacities: List[int],
 	allowed_model_names_per_plant: Sequence[Iterable[str]],
@@ -55,6 +56,8 @@ def validate_input(
 		Model name per item, same length as item_names.
 	item_quantities : List[int]
 		Non-negative integer quantity per item, same length as item_names.
+	order_ids : List[str]
+		Order identifier per item (string), same length as item_names/model_names.
 	plant_names : List[str]
 		Plant labels (must be unique, aligned with capacities and allowed sets).
 	plant_quantity_capacities : List[int]
@@ -78,10 +81,14 @@ def validate_input(
 
 	# Basic shape validations
 	n = len(model_names)
-	if not (len(item_names) == n and len(item_quantities) == n):
-		raise AssertionError("item_names/model_names/item_quantities mismatch")
+	if not (len(item_names) == n and len(item_quantities) == n and len(order_ids) == n):
+		raise AssertionError("item_names/model_names/item_quantities/order_ids mismatch")
 	if len(set(item_names)) != n:
 		raise ValueError("item_names must be unique.")
+
+	# order_ids basic typing
+	if not all(isinstance(oid, str) for oid in order_ids):
+		raise AssertionError("order_ids must be a list of strings with length matching items")
 
 	P = len(plant_quantity_capacities)
 	if not (P > 0 and len(allowed_model_names_per_plant) == P and len(plant_names) == P):

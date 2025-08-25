@@ -40,6 +40,7 @@ def optimize_plants_assignment(
     item_names: List[str],
     model_names: List[str],
     item_quantities: List[int],                     # >= 0 (zero allowed)
+    order_ids: List[str],                           # required, per-item order identifier
     # --- Plants ---
     plant_names: List[str],
     plants_quantity_capacities: List[int],           # > 0 per plant
@@ -48,6 +49,7 @@ def optimize_plants_assignment(
     additive_objectives: List[ObjectiveSpec],
     # --- Structural weights (linear counts) ---
     w_model_name_group: float = 1.0,                           # minimize model_names splitting: Σ z - Σ u
+    w_model_order_id_group: float = 0.0,                       # minimize (model,order) splitting across plants
     w_plants: float = 0.0,                          # minimize plants used: Σ y
     # --- HARD minimum total quantity per (name, plant) ---
     min_allowed_qty_of_items_same_model_name_in_a_plant: int = 0,  # 0 disables hard min
@@ -124,6 +126,7 @@ def optimize_plants_assignment(
         item_names=item_names,
         model_names=model_names,
         item_quantities=item_quantities,
+        order_ids=order_ids,
         plant_names=plant_names,
         plant_quantity_capacities=plants_quantity_capacities,
         allowed_model_names_per_plant=allowed_model_names_per_plant,

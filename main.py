@@ -28,8 +28,9 @@ if __name__ == "__main__":
     # --- Run A: SOFT minimum only (penalize below 6; no reward above) ---
     res_soft = optimize_plants_assignment(
         item_names=item_names,
-        model_names =model_names,
+        model_names=model_names,
         item_quantities=quantities,
+        order_ids=order_ids,
         plant_names=plant_names,
         plants_quantity_capacities=plant_quantity_capacities,
         allowed_model_names_per_plant=allowed_model_names_per_plant,
