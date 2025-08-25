@@ -1,4 +1,4 @@
-from typing import Iterable, List
+from typing import Iterable, List, Sequence
 from dataclasses import is_dataclass
 from datatypes import ObjectiveSpec
 
@@ -32,3 +32,67 @@ def ObjectiveSpecValidation(objectives: Iterable[ObjectiveSpec]) -> None:
 		for idx, v in enumerate(vals):
 			if not isinstance(v, int):
 				raise ValueError(f"Objective '{spec.name}' has a non-integer value at index {idx}: {v!r}")
+
+
+def validate_input(
+	*,
+	item_names: List[str],
+	model_names: List[str],
+	item_quantities: List[int],
+	plant_names: List[str],
+	plant_quantity_capacities: List[int],
+	allowed_model_names_per_plant: Sequence[Iterable[str]],
+	additive_objectives: Iterable[ObjectiveSpec],
+	min_allowed_qty_of_items_same_model_name_in_a_plant: int,
+	soft_min_qty_of_items_same_model_name_in_a_plant: int,
+) -> None:
+	"""Validate all inputs for the CP-SAT optimizer.
+
+	Parameters
+	----------
+	item_names : List[str]
+		Unique identifiers for items (must be unique and match lengths).
+	model_names : List[str]
+		Model name per item, same length as item_names.
+	item_quantities : List[int]
+		Non-negative integer quantity per item, same length as item_names.
+	plant_names : List[str]
+		Plant labels (must be unique, aligned with capacities and allowed sets).
+	plant_quantity_capacities : List[int]
+		Strictly positive integer capacity per plant.
+	allowed_model_names_per_plant : Sequence[Iterable[str]]
+		For each plant, the set/iterable of model names it can produce.
+	additive_objectives : Iterable[ObjectiveSpec]
+		Collection of additive objective specs; each must have integer values.
+	min_allowed_qty_of_items_same_model_name_in_a_plant : int
+		Global hard minimum quantity per (model_name, plant); 0 disables.
+	soft_min_qty_of_items_same_model_name_in_a_plant : int
+		Global soft minimum quantity per (model_name, plant); 0 disables.
+
+	Raises
+	------
+	AssertionError
+		If core shape/type constraints fail (e.g., mismatched lengths, nonpositive capacities).
+	ValueError
+		If names are not unique or objective values are not integers.
+	"""
+
+	# Basic shape validations
+	n = len(model_names)
+	assert len(item_names) == n and len(item_quantities) == n, "item_names/model_names/item_quantities mismatch"
+	if len(set(item_names)) != n:
+		raise ValueError("item_names must be unique.")
+
+	P = len(plant_quantity_capacities)
+	assert P > 0 and len(allowed_model_names_per_plant) == P and len(plant_names) == P, "plant arrays must align"
+	if len(set(plant_names)) != P:
+		raise ValueError("plant_names must be unique.")
+
+	# Types and ranges
+	assert all(isinstance(c, int) and c > 0 for c in plant_quantity_capacities), "plant capacities must be positive ints"
+	assert all(isinstance(q, int) and q >= 0 for q in item_quantities), "item quantities must be nonnegative ints"
+	assert isinstance(min_allowed_qty_of_items_same_model_name_in_a_plant, int) and min_allowed_qty_of_items_same_model_name_in_a_plant >= 0
+	assert isinstance(soft_min_qty_of_items_same_model_name_in_a_plant, int) and soft_min_qty_of_items_same_model_name_in_a_plant >= 0
+
+	# Objectives validation (ensures integer values)
+	ObjectiveSpecValidation(additive_objectives)

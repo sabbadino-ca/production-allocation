@@ -17,7 +17,7 @@ if __name__ == "__main__":
     due_date_boosts = [80,50,40,20,  90,60,30,  10,70,  0,  95]
 
     plant_names = ["North", "East", "West"]
-    plant_caps  = [9, 6, 10]
+    plantS_quantity_capacities  = [9, 6, 10]
     allowed_model_names_per_plant = [
         {"red", "blue"},   # North
         {"red", "green"},  # East
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         model_names =model_names,
         item_quantities=quantities,
         plant_names=plant_names,
-        plant_quantity_capacities=plant_caps,
+        plant_quantity_capacities=plantS_quantity_capacities,
         allowed_model_names_per_plant=allowed_model_names_per_plant,
         additive_objectives=specs,
         w_group=1.2,   # grouping penalty on

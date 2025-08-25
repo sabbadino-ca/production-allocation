@@ -27,7 +27,7 @@ from collections import defaultdict
 from datatypes import ObjectiveSpec
 from utilities import _fractional_knapsack_ub, _group_names_by_model_name
 from typing import List, Dict, Iterable, Tuple, Optional, Sequence
-from inputvalidations import ObjectiveSpecValidation
+from inputvalidations import ObjectiveSpecValidation, validate_input
 
 
 
@@ -100,22 +100,24 @@ def optimize_plants_assignment(
       - **naming note**: 'unsupported_items' = items with model_names unsupported by all plants.
                          'unallocated_items' = eligible items not assigned to any plant.
     """
-    # Validate additive objective specs contain only integer values
-    ObjectiveSpecValidation(additive_objectives)
-    # ---------- Basic validation ----------
-    n = len(model_names)
-    assert len(item_names) == n and len(item_quantities) == n, "item_names/model_names/item_quantities mismatch"
-    if len(set(item_names)) != n:
-        raise ValueError("item_names must be unique.")
-    P = len(plant_quantity_capacities)
-    assert P > 0 and len(allowed_model_names_per_plant) == P and len(plant_names) == P, "plant arrays must align"
-    if len(set(plant_names)) != P:
-        raise ValueError("plant_names must be unique.")
-    assert all(isinstance(c, int) and c > 0 for c in plant_quantity_capacities), "plant capacities must be positive ints"
-    assert all(isinstance(q, int) and q >= 0 for q in item_quantities), "item quantities must be nonnegative ints"
-    assert isinstance(min_allowed_qty_of_items_same_model_name_in_a_plant, int) and min_allowed_qty_of_items_same_model_name_in_a_plant >= 0
-    assert isinstance(soft_min_qty_of_items_same_model_name_in_a_plant, int) and soft_min_qty_of_items_same_model_name_in_a_plant >= 0
+   
+    # ---------- validations start  ----------
+    validate_input(
+        item_names=item_names,
+        model_names=model_names,
+        item_quantities=item_quantities,
+        plant_names=plant_names,
+        plant_quantity_capacities=plant_quantity_capacities,
+        allowed_model_names_per_plant=allowed_model_names_per_plant,
+        additive_objectives=additive_objectives,
+        min_allowed_qty_of_items_same_model_name_in_a_plant=min_allowed_qty_of_items_same_model_name_in_a_plant,
+        soft_min_qty_of_items_same_model_name_in_a_plant=soft_min_qty_of_items_same_model_name_in_a_plant,
+    )
+    # ---------- validations end  ----------
 
+    n = len(model_names)
+    P = len(plant_quantity_capacities)
+    
     # Handy mappers for human-readable output
     def plant_label(p: int) -> str: return plant_names[p]
     name_to_index = {name: i for i, name in enumerate(item_names)}
