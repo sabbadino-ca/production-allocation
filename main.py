@@ -6,25 +6,17 @@ from datatypes import ObjectiveSpec
 from optimizer import optimize_plants_assignment  # Add this import if the function is defined in optimize.py
 from pathlib import Path
 import argparse
-from input_loader import load_plants_arrays
+from input_loader import load_plants_arrays, load_items_arrays
 
 if __name__ == "__main__":
-    # Example dataset (includes a zero-quantity item to show it's allowed)
-    item_names = [f"item_{i}" for i in range(11)]
-    model_names = ["red","red","red","red",
-                      "blue","blue","blue",
-                      "green","green",
-                      "yellow",   # unsupported in this example
-                      "red"]
-    quantities = [3,2,2,4,   5,3,2,   1,6,   2,   0]   # item_10 has quantity = 0
-    due_date_boosts = [80,50,40,20,  90,60,30,  10,70,  0,  95]
-
-    # Require plants file path as an input parameter
+    # Require plants and items file paths as input parameters
     parser = argparse.ArgumentParser(description="Run production allocation example")
     parser.add_argument("--plants-file", required=True, help="Path to plants JSON file")
+    parser.add_argument("--items-file", required=True, help="Path to items JSON file")
     args = parser.parse_args()
 
     plant_names, plant_quantity_capacities, allowed_model_names_per_plant = load_plants_arrays(args.plants_file)
+    item_names, model_names, quantities, due_date_boosts = load_items_arrays(args.items_file)
 
     # Per-item additive objectives (family of sums)
     specs = [
@@ -38,8 +30,8 @@ if __name__ == "__main__":
         item_names=item_names,
         model_names =model_names,
         item_quantities=quantities,
-    plant_names=plant_names,
-    plants_quantity_capacities=plant_quantity_capacities,
+        plant_names=plant_names,
+        plants_quantity_capacities=plant_quantity_capacities,
         allowed_model_names_per_plant=allowed_model_names_per_plant,
         additive_objectives=specs,
         w_group=1.2,   # grouping penalty on
