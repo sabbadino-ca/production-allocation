@@ -42,7 +42,7 @@ def optimize_plants_assignment(
     item_quantities: List[int],                     # >= 0 (zero allowed)
     # --- Plants ---
     plant_names: List[str],
-    plant_quantity_capacities: List[int],           # > 0 per plant
+    plants_quantity_capacities: List[int],           # > 0 per plant
     allowed_model_names_per_plant: Sequence[Iterable[str]],
     # --- Additive objectives (per-item sums) ---
     additive_objectives: List[ObjectiveSpec],
@@ -107,7 +107,7 @@ def optimize_plants_assignment(
         model_names=model_names,
         item_quantities=item_quantities,
         plant_names=plant_names,
-        plant_quantity_capacities=plant_quantity_capacities,
+        plant_quantity_capacities=plants_quantity_capacities,
         allowed_model_names_per_plant=allowed_model_names_per_plant,
         additive_objectives=additive_objectives,
         min_allowed_qty_of_items_same_model_name_in_a_plant=min_allowed_qty_of_items_same_model_name_in_a_plant,
@@ -116,7 +116,7 @@ def optimize_plants_assignment(
     # ---------- validations end  ----------
 
     n = len(model_names)
-    P = len(plant_quantity_capacities)
+    P = len(plants_quantity_capacities)
     
     # Handy mappers for human-readable output
     def plant_label(p: int) -> str: return plant_names[p]
@@ -142,7 +142,7 @@ def optimize_plants_assignment(
             label = plant_label(p)
             num_assigned = 0
             total_qty = 0
-            cap = plant_quantity_capacities[p]
+            cap = plants_quantity_capacities[p]
             md_by_plant[label] = (
                 f"### Plant {label} — allocated items: {num_assigned} | allocated quantity: {total_qty} | plant max quantity capacity: {cap} | unused capacity: {cap - total_qty}\n\n| Item | Model name | Quantity |\n|---|---|---|\n| *(none)* | — | — |\n"
             )
@@ -193,7 +193,7 @@ def optimize_plants_assignment(
 
     # For normalization UBs
     quantities_kept = [item_quantities[i] for i in kept_items]
-    total_capacity = sum(plant_quantity_capacities)
+    total_capacity = sum(plants_quantity_capacities)
 
     # ---------- Structural normalizers (closed-form) ----------
     # For grouping: extra plants a model name may touch beyond its first
@@ -256,7 +256,7 @@ def optimize_plants_assignment(
     # Per-plant capacity (sum of item quantities)
     for p in range(P):
         m.Add(sum(item_quantities[local_to_orig[li]] * x[li][p] for li in range(len(kept_items)))
-              <= plant_quantity_capacities[p])
+              <= plants_quantity_capacities[p])
 
     # Link plant usage y[p] <-> assignments x
     for p in range(P):
@@ -457,7 +457,7 @@ def optimize_plants_assignment(
         assigned_names = plants_to_items.get(label, [])
         num_assigned = len(assigned_names)
         total_qty = sum(item_quantities[name_to_index[name]] for name in assigned_names)
-        cap = plant_quantity_capacities[plant_names.index(label)]
+        cap = plants_quantity_capacities[plant_names.index(label)]
         header = (
             f"### Plant {label} — allocated items: {num_assigned} | allocated quantity: {total_qty} | "
             f"plant max quantity capacity: {cap} | unused capacity: {cap - total_qty}\n\n| Item | Model name | Quantity |\n|---|---|---|\n"

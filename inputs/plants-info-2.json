@@ -1,0 +1,5 @@
+[
+  { "plant_name": "North", "plant_quantity_capacity": 9,  "allowedModels": ["red", "blue"] },
+  { "plant_name": "East",  "plant_quantity_capacity": 6,  "allowedModels": ["red", "green"] },
+  { "plant_name": "West",  "plant_quantity_capacity": 10, "allowedModels": ["blue", "green"] }
+]

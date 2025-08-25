@@ -96,3 +96,37 @@ def validate_input(
 
 	# Objectives validation (ensures integer values)
 	ObjectiveSpecValidation(additive_objectives)
+
+	# Validate allowed models per plant
+	for p_idx, models in enumerate(allowed_model_names_per_plant):
+		# Disallow passing a single string directly
+		if isinstance(models, (str, bytes)):
+			raise TypeError(
+				f"allowed_model_names_per_plant[{p_idx}] must be an iterable of strings, not a string."
+			)
+		try:
+			lst = list(models)
+		except Exception as exc:
+			raise TypeError(
+				f"allowed_model_names_per_plant[{p_idx}] must be an iterable of strings."
+			) from exc
+		# Non-empty requirement
+		if len(lst) == 0:
+			raise ValueError(
+				f"allowed models for plant '{plant_names[p_idx]}' must be non-empty."
+			)
+		# All entries must be strings and non-blank
+		for j, m in enumerate(lst):
+			if not isinstance(m, str):
+				raise TypeError(
+					f"allowed model at plant '{plant_names[p_idx]}' index {j} must be str, got {type(m).__name__}."
+				)
+			if m.strip() == "":
+				raise ValueError(
+					f"allowed model at plant '{plant_names[p_idx]}' index {j} must not be empty/blank."
+				)
+		# Duplicates check (preserve case-sensitivity as-is)
+		if len(set(lst)) != len(lst):
+			raise ValueError(
+				f"allowed models for plant '{plant_names[p_idx]}' contain duplicates: {lst}"
+			)

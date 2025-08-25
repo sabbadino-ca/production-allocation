@@ -294,6 +294,62 @@ class TestInputValidation(unittest.TestCase):
 				soft_min_qty_of_items_same_model_name_in_a_plant=-5,
 			)
 
+	def test_allowed_models_empty_raises(self) -> None:
+		(
+			item_names,
+			model_names,
+			item_quantities,
+			plant_names,
+			plant_caps,
+			_allowed,
+			objectives,
+			min_allowed,
+			soft_min,
+		) = _valid_args()
+
+		# Make the first plant have an empty allowed models list
+		allowed_bad: Sequence[Iterable[str]] = [[], {"mB"}]
+		with self.assertRaises(ValueError):
+			validate_input(
+				item_names=item_names,
+				model_names=model_names,
+				item_quantities=item_quantities,
+				plant_names=plant_names,
+				plant_quantity_capacities=plant_caps,
+				allowed_model_names_per_plant=allowed_bad,
+				additive_objectives=objectives,
+				min_allowed_qty_of_items_same_model_name_in_a_plant=min_allowed,
+				soft_min_qty_of_items_same_model_name_in_a_plant=soft_min,
+			)
+
+	def test_allowed_models_duplicates_raises(self) -> None:
+		(
+			item_names,
+			model_names,
+			item_quantities,
+			plant_names,
+			plant_caps,
+			_allowed,
+			objectives,
+			min_allowed,
+			soft_min,
+		) = _valid_args()
+
+		# Duplicate "mA" for the first plant
+		allowed_bad: Sequence[Iterable[str]] = [["mA", "mA"], {"mB"}]
+		with self.assertRaises(ValueError):
+			validate_input(
+				item_names=item_names,
+				model_names=model_names,
+				item_quantities=item_quantities,
+				plant_names=plant_names,
+				plant_quantity_capacities=plant_caps,
+				allowed_model_names_per_plant=allowed_bad,
+				additive_objectives=objectives,
+				min_allowed_qty_of_items_same_model_name_in_a_plant=min_allowed,
+				soft_min_qty_of_items_same_model_name_in_a_plant=soft_min,
+			)
+
 	def test_objectives_type_error_when_not_objectivespec(self) -> None:
 		(
 			item_names,
