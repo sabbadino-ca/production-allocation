@@ -1,5 +1,4 @@
 from typing import Iterable, List, Sequence
-from dataclasses import is_dataclass
 from datatypes import ObjectiveSpec
 
 
@@ -79,20 +78,30 @@ def validate_input(
 
 	# Basic shape validations
 	n = len(model_names)
-	assert len(item_names) == n and len(item_quantities) == n, "item_names/model_names/item_quantities mismatch"
+	if not (len(item_names) == n and len(item_quantities) == n):
+		raise AssertionError("item_names/model_names/item_quantities mismatch")
 	if len(set(item_names)) != n:
 		raise ValueError("item_names must be unique.")
 
 	P = len(plant_quantity_capacities)
-	assert P > 0 and len(allowed_model_names_per_plant) == P and len(plant_names) == P, "plant arrays must align"
+	if not (P > 0 and len(allowed_model_names_per_plant) == P and len(plant_names) == P):
+		raise AssertionError("plant arrays must align")
 	if len(set(plant_names)) != P:
 		raise ValueError("plant_names must be unique.")
 
 	# Types and ranges
-	assert all(isinstance(c, int) and c > 0 for c in plant_quantity_capacities), "plant capacities must be positive ints"
-	assert all(isinstance(q, int) and q >= 0 for q in item_quantities), "item quantities must be nonnegative ints"
-	assert isinstance(min_allowed_qty_of_items_same_model_name_in_a_plant, int) and min_allowed_qty_of_items_same_model_name_in_a_plant >= 0
-	assert isinstance(soft_min_qty_of_items_same_model_name_in_a_plant, int) and soft_min_qty_of_items_same_model_name_in_a_plant >= 0
+	if not all(isinstance(c, int) and c > 0 for c in plant_quantity_capacities):
+		raise AssertionError("plant capacities must be positive ints")
+	if not all(isinstance(q, int) and q >= 0 for q in item_quantities):
+		raise AssertionError("item quantities must be nonnegative ints")
+	if not (isinstance(min_allowed_qty_of_items_same_model_name_in_a_plant, int) and min_allowed_qty_of_items_same_model_name_in_a_plant >= 0):
+		raise AssertionError(
+			"min_allowed_qty_of_items_same_model_name_in_a_plant must be a non-negative int"
+		)
+	if not (isinstance(soft_min_qty_of_items_same_model_name_in_a_plant, int) and soft_min_qty_of_items_same_model_name_in_a_plant >= 0):
+		raise AssertionError(
+			"soft_min_qty_of_items_same_model_name_in_a_plant must be a non-negative int"
+		)
 
 	# Objectives validation (ensures integer values)
 	ObjectiveSpecValidation(additive_objectives)

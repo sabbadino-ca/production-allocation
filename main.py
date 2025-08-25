@@ -43,7 +43,7 @@ if __name__ == "__main__":
         log=False
     )
     print("#=== SOFT MIN ONLY ===")
-    print(res_soft["objective_breakdown"]["status"])
+    print(f"solver status: {res_soft['objective_breakdown']['status']}")
     print(res_soft["markdown_all_tables"])
 
     # --- Run B: HARD minimum only (must reach 6 per model name ×plant to run there) ---

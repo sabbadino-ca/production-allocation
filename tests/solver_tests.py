@@ -51,6 +51,8 @@ class TestSolverSingleFactor(unittest.TestCase):
 			soft_min_qty_of_items_same_model_name_in_a_plant=0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertEqual(res["items_placed"], 3)
@@ -92,6 +94,8 @@ class TestSolverSingleFactor(unittest.TestCase):
 			soft_min_qty_of_items_same_model_name_in_a_plant=0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertEqual(res["items_placed"], 2)
@@ -124,6 +128,8 @@ class TestSolverSingleFactor(unittest.TestCase):
 			soft_min_qty_of_items_same_model_name_in_a_plant=0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertEqual(res["items_placed"], 3)
@@ -159,6 +165,8 @@ class TestSolverSingleFactor(unittest.TestCase):
 			w_soft_min_qty_of_items_same_model_name_in_a_plant=1.0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertEqual(res["items_placed"], 2)
@@ -193,6 +201,8 @@ class TestSolverSingleFactor(unittest.TestCase):
 			soft_min_qty_of_items_same_model_name_in_a_plant=0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertIn("i2", res["unsupported_items"])  # Y unsupported
@@ -225,6 +235,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			w_plants=0.0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		strong = optimize_plants_assignment(
@@ -239,6 +251,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			w_plants=5.0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertGreaterEqual(base["items_placed"], strong["items_placed"])  # penalty can reduce placements
@@ -268,6 +282,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			w_plants=0.0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		high = optimize_plants_assignment(
@@ -282,6 +298,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			w_plants=0.0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertLessEqual(high["model_name_plants_used"].get("A", 0), low["model_name_plants_used"].get("A", 0))
@@ -310,6 +328,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			w_soft_min_qty_of_items_same_model_name_in_a_plant=0.1,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		high = optimize_plants_assignment(
@@ -324,6 +344,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			w_soft_min_qty_of_items_same_model_name_in_a_plant=5.0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		low_short = low["objective_breakdown"]["soft_min_qty"].get("total_shortfall", 0)
@@ -353,6 +375,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			min_allowed_qty_of_items_same_model_name_in_a_plant=3,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertEqual(res["items_placed"], 0)
@@ -383,6 +407,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			w_soft_min_qty_of_items_same_model_name_in_a_plant=1.0,
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		self.assertGreater(res["items_placed"], 0)
@@ -409,6 +435,8 @@ class TestWeightSensitivityAndMinima(unittest.TestCase):
 			additive_objectives=[_mk_fill_spec(len(item_names), weight=1.0)],
 			time_limit_s=2,
 			log=False,
+			random_seed=42,
+			num_search_workers=1,
 		)
 
 		ob = res.get("objective_breakdown", {})

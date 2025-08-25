@@ -25,7 +25,7 @@ CP-SAT plant assignment with:
 from ortools.sat.python import cp_model
 from collections import defaultdict
 from datatypes import ObjectiveSpec
-from utilities import _fractional_knapsack_ub, _group_names_by_model_name
+from utilities import _fractional_knapsack_ub, _group_names_by_model_name, decode_solution
 from typing import List, Dict, Iterable, Tuple, Optional, Sequence
 from inputvalidations import ObjectiveSpecValidation, validate_input
 
@@ -57,6 +57,8 @@ def optimize_plants_assignment(
     # --- Solver controls ---
     time_limit_s: float = 10.0,
     log: bool = False,
+    random_seed: Optional[int] = None,
+    num_search_workers: Optional[int] = None
 ) -> Dict:
     """
     Solve a single CP-SAT model that assigns items to plants.
@@ -68,39 +70,55 @@ def optimize_plants_assignment(
     - item i can go to plant p only if item's model_name ∈ allowed_model_names[p].
     - Items with model_names unsupported by all plants are filtered "up front".
 
-    Optional Hard Minimum (global)
-    ------------------------------
-    If min_allowed_qty_of_items_same_model_name_in_a_plant > 0:
-      Σ_{i in model name f} quantity_i * x[i,p] ≥ min_allowed * z[f,p]
-    This *forbids* running a model_name at a plant in tiny lots.
+        Optional Hard Minimum (global)
+        ------------------------------
+        If min_allowed_qty_of_items_same_model_name_in_a_plant > 0:
+            Σ_{i in model name f} quantity_i * x[i,p] ≥ min_allowed * z[f,p]
+        This forbids running a model_name at a plant in tiny lots.
 
-    Optional Soft Minimum (global, shortfall-only)
-    ----------------------------------------------
-    If soft_min_qty_of_items_same_model_name_in_a_plant > 0 and its weight > 0:
-      shortfall[f,p] ≥ soft_min * z[f,p] - Σ_{i in f} quantity_i * x[i,p]
-      shortfall[f,p] ≥ 0
-      Objective adds a penalty term: - coef_soft * Σ shortfall[f,p]
-    Penalty applies only when *below* the threshold; no reward above it.
+        Optional Soft Minimum (global, shortfall-only)
+        ----------------------------------------------
+        If soft_min_qty_of_items_same_model_name_in_a_plant > 0 and its weight > 0:
+            shortfall[f,p] ≥ soft_min * z[f,p] - Σ_{i in f} quantity_i * x[i,p]
+            shortfall[f,p] ≥ 0
+            Objective adds a penalty term: - coef_soft * Σ shortfall[f,p]
+        Penalty applies only when below the threshold; no reward above it.
 
-    Objective (single scalarized maximize)
-    --------------------------------------
-    Maximize:
-      + Σ_k  sgn_k * (K * w_k / UB_k) * Σ_i v_k[i] * x[i,·]
-      - (K * w_group  / extra_plants_max) * (Σ z - Σ u)
-      - (K * w_plants / plants_used_max) * (Σ y)
-      - (K * w_soft   / denom_soft)      * Σ shortfall[f,p]      (if enabled)
+        Objective (single scalarized maximize)
+        --------------------------------------
+        Maximize:
+            + Σ_k  sgn_k * (K * w_k / UB_k) * Σ_i v_k[i] * x[i,·]
+            - (K * w_group  / extra_plants_max) * (Σ z - Σ u)
+            - (K * w_plants / plants_used_max) * (Σ y)
+            - (K * w_soft   / denom_soft)      * Σ shortfall[f,p]      (if enabled)
+
+        Solver controls
+        ---------------
+        - random_seed (Optional[int]): If provided, sets CpSolverParameters.random_seed to make
+            the search pseudo-deterministic and reproducible for tests. See CP-SAT parameters
+            reference: https://developers.google.com/optimization/reference/python/sat/python/cp_model#cpsolverparameters
+        - num_search_workers (Optional[int]): If provided, sets CpSolverParameters.num_search_workers
+            to control parallelism. Setting to 1 helps reproducibility; >1 may improve speed.
 
         Returns
-    -------
-    A dict with:
-            - item-level assignments and statuses ("allocated" | "unallocated" | "unsupported model_name")
-      - per-plant and per-model_name summaries
-      - Markdown tables for quick display
-      - diagnostics: achieved additive sums, coefficients, normalizers, solver status
-      - **naming note**: 'unsupported_items' = items with model_names unsupported by all plants.
-                         'unallocated_items' = eligible items not assigned to any plant.
+        -------
+        dict
+                - item-level assignments and statuses ("allocated" | "unallocated" | "unsupported model_name")
+                - per-plant and per-model_name summaries
+                - Markdown tables for quick display
+                - diagnostics: achieved additive sums, coefficients, normalizers, solver status
+                - naming note: 'unsupported_items' = items with model_names unsupported by all plants;
+                    'unallocated_items' = eligible items not assigned to any plant.
+
+    Raises
+    ------
+    AssertionError
+        If structural validations fail (shapes, duplicates, capacities).
+    ValueError
+        If objective specs are invalid (e.g., non-integer values or negative additive values),
+        or if senses are not one of {"maximize","minimize"}.
     """
-   
+
     # ---------- validations start  ----------
     validate_input(
         item_names=item_names,
@@ -360,170 +378,71 @@ def optimize_plants_assignment(
     s = cp_model.CpSolver()
     s.parameters.max_time_in_seconds = float(time_limit_s)
     s.parameters.log_search_progress = bool(log)
+    if random_seed is not None:
+        s.parameters.random_seed = int(random_seed)
+    if num_search_workers is not None:
+        s.parameters.num_search_workers = int(num_search_workers)
     status = s.Solve(m)
 
     # --------------------------- Decode solution ---------------------------
-
-    # assignment_idx[i] = plant index or -1 if not allocated (for kept items only)
-    assignment_idx = [-1] * n
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for li in range(len(kept_items)):
-            for p in range(P):
-                if s.Value(x[li][p]):
-                    assignment_idx[local_to_orig[li]] = p
-                    break
-
-    # Human-readable per-item records
-    items_by_name: Dict[str, Dict] = {}
-    for i in range(n):
-        name = item_names[i]
-        if i in unsupported_set:
-            items_by_name[name] = {"status": "unsupported model_name", "plant": None, "model_name": model_names[i]}
-        else:
-            p = assignment_idx[i]
-            if p >= 0:
-                items_by_name[name] = {"status": "allocated", "plant": plant_label(p), "model_name": model_names[i]}
-            else:
-                items_by_name[name] = {"status": "unallocated", "plant": None, "model_name": model_names[i]}
-
-    # Plants → items (labels)
-    plants_to_items: Dict[str, List[str]] = defaultdict(list)
-    for i in range(n):
-        rec = items_by_name[item_names[i]]
-        if rec["status"] == "allocated":
-            plants_to_items[rec["plant"]].append(item_names[i])
-    plants_to_items = dict(plants_to_items)
-
-    # Plants → model_names (labels), and inverse
-    plants_to_model_names: Dict[str, List[str]] = {}
-    model_name_to_plants: Dict[str, List[str]] = {fam: [] for fam in unique_names}
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        for p in range(P):
-            present = []
-            for fam in unique_names:
-                ci = model_name_index[fam]
-                if s.Value(z[ci][p]):
-                    present.append(fam)
-                    model_name_to_plants[fam].append(plant_label(p))
-            if present:
-                plants_to_model_names[plant_label(p)] = sorted(present)
-    else:
-        plants_to_model_names = {}
-        model_name_to_plants = {fam: [] for fam in unique_names}
-
-    # Tallies
-    items_placed = sum(1 for v in items_by_name.values() if v["status"] == "allocated")
-    total_quantity_placed = sum(item_quantities[name_to_index[name]]
-                                for name, rec in items_by_name.items() if rec["status"] == "allocated")
-    used_plants_list = [label for label in plant_names if label in plants_to_items]
-    plants_used_val = len(used_plants_list)
-
-    # Diagnostics per model name and soft shortfall totals
-    if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        model_names_plants_used = {}
-        placed_per_model_name = {}
-        for fam in unique_names:
-            ci = model_name_index[fam]
-            model_names_plants_used[fam] = sum(int(s.Value(z[ci][p])) for p in range(P))
-            placed_per_model_name[fam] = sum(1 for i in items_of_name[fam] if items_by_name[item_names[i]]["status"] == "allocated")
-
-        # Evaluate linear expressions directly (supported by OR-Tools)
-        extra_plants_val = s.Value(extra_plants_expr)
-        soft_shortfall_total = s.Value(sum(soft_shortfall_vars)) if soft_shortfall_vars else 0
-
-        # Optional: per-pair shortfalls for inspection/tuning
-        soft_shortfall_by_pair = {
-            (fam, plant): int(s.Value(sf)) for (fam, plant, sf) in soft_shortfall_pairs
-        }
-    else:
-        model_names_plants_used = {fam: 0 for fam in unique_names}
-        placed_per_model_name = {fam: 0 for fam in unique_names}
-        extra_plants_val = 0
-        soft_shortfall_total = 0
-        soft_shortfall_by_pair = {}
-
-    # Achieved raw sums for additive objectives (pre-normalization)
-    achieved = {}
-    for spec in additive_objectives:
-        v = spec.values
-        achieved[spec.name] = sum(v[name_to_index[name]]
-                                  for name, rec in items_by_name.items() if rec["status"] == "allocated")
-
-    # --------------------------- Markdown tables ---------------------------
-
-    # Per-plant tables (Item | Model name | Quantity)
-    md_by_plant: Dict[str, str] = {}
-    for label in plant_names:
-        assigned_names = plants_to_items.get(label, [])
-        num_assigned = len(assigned_names)
-        total_qty = sum(item_quantities[name_to_index[name]] for name in assigned_names)
-        cap = plants_quantity_capacities[plant_names.index(label)]
-        header = (
-            f"### Plant {label} — allocated items: {num_assigned} | allocated quantity: {total_qty} | "
-            f"plant max quantity capacity: {cap} | unused capacity: {cap - total_qty}\n\n| Item | Model name | Quantity |\n|---|---|---|\n"
-        )
-        rows: List[str] = []
-        for name in assigned_names:
-            i = name_to_index[name]
-            rows.append(f"| {name} | {model_names[i]} | {item_quantities[i]} |")
-        if not rows:
-            rows.append("| *(none)* | — | — |")
-        md_by_plant[label] = header + "\n".join(rows) + "\n"
-
-    # Unallocated (eligible but not assigned) items
-    unallocated_items = [name for name, rec in items_by_name.items() if rec["status"] == "unallocated"]
-    unalloc_header = "### Unallocated items\n\n| Item | Model name | Quantity |\n|---|---|---|\n"
-    unalloc_rows = []
-    for name in unallocated_items:
-        i = name_to_index[name]
-        unalloc_rows.append(f"| {name} | {model_names[i]} | {item_quantities[i]} |")
-    if not unalloc_rows:
-        unalloc_rows.append("| *(none)* | — | — |")
-    unallocated_md = unalloc_header + "\n".join(unalloc_rows) + "\n"
-
-    # Unsupported-model_name items (filtered upfront)
-    unsupported_names = [item_names[i] for i in unsupported_idx]
-    unsup_header = "### Unsupported model_name items\n\n| Item | Model name |\n|---|---|\n"
-    unsup_rows = [f"| {name} | {model_names[name_to_index[name]]} |" for name in unsupported_names]
-    if not unsup_rows:
-        unsup_rows.append("| *(none)* | — |")
-    unsupported_md = unsup_header + "\n".join(unsup_rows) + "\n"
-
-    md_plants_concat = "\n".join(md_by_plant[label] for label in plant_names)
-    md_all = md_plants_concat + "\n" + unallocated_md + "\n" + unsupported_md
+    decoded = decode_solution(
+        solver=s,
+        status=status,
+        num_items=n,
+        num_plants=P,
+        kept_items=kept_items,
+        local_to_orig=local_to_orig,
+        name_to_index=name_to_index,
+        unique_model_names=unique_names,
+        model_name_index=model_name_index,
+        items_of_name=items_of_name,
+        item_names=item_names,
+        model_names=model_names,
+        item_quantities=item_quantities,
+        plant_names=plant_names,
+        plants_quantity_capacities=plants_quantity_capacities,
+        unsupported_set=unsupported_set,
+        unsupported_idx=unsupported_idx,
+        x=x,
+        z=z,
+        extra_plants_expr=extra_plants_expr,
+        soft_shortfall_vars=soft_shortfall_vars,
+        soft_shortfall_pairs=soft_shortfall_pairs,
+        additive_objectives=additive_objectives,
+    )
 
     # --------------------------- Return structured result ---------------------------
 
     return {
         # Item-level assignments (by item name)
-        "items": items_by_name,                                 # {item_name: {"status","plant","model_name"}}
+        "items": decoded["items_by_name"],                      # {item_name: {"status","plant","model_name"}}
         # Plant/model_name summaries
-        "plants_to_items": plants_to_items,                     # {plant_label: [item_name]}
-        "plants_to_model_names": plants_to_model_names,         # {plant_label: [model_name]}
-        "model_name_to_plants": model_name_to_plants,           # {model_name: [plant_label]}
+        "plants_to_items": decoded["plants_to_items"],
+        "plants_to_model_names": decoded["plants_to_model_names"],
+        "model_name_to_plants": decoded["model_name_to_plants"],
         # Tallies
-        "items_placed": items_placed,
-        "total_quantity_placed": total_quantity_placed,
-        "used_plants": used_plants_list,
-        "plants_used": plants_used_val,
-        "extra_plants": extra_plants_val,
-        "model_name_plants_used": model_names_plants_used,
-        "placed_per_model_name": placed_per_model_name,
+        "items_placed": decoded["items_placed"],
+        "total_quantity_placed": decoded["total_quantity_placed"],
+        "used_plants": decoded["used_plants_list"],
+        "plants_used": decoded["plants_used_val"],
+        "extra_plants": decoded["extra_plants_val"],
+        "model_name_plants_used": decoded["model_names_plants_used"],
+        "placed_per_model_name": decoded["placed_per_model_name"],
         # Upfront unsupported (renamed keys)
-        "unsupported_items": unsupported_names,
+        "unsupported_items": decoded["unsupported_names"],
         "unsupported_items_by_model_name": _group_names_by_model_name(unsupported_idx, model_names, item_names),
         # Eligible but skipped in the solve
-        "unallocated_items": unallocated_items,
+        "unallocated_items": decoded["unallocated_items"],
         # Markdown
-        "plant_markdown_tables_by_plant": md_by_plant,
-        "plant_markdown_tables": md_plants_concat,
-        "unallocated_markdown_table": unallocated_md,
-        "unsupported_model_name_markdown_table": unsupported_md,
-        "markdown_all_tables": md_all,
+        "plant_markdown_tables_by_plant": decoded["md_by_plant"],
+        "plant_markdown_tables": decoded["md_plants_concat"],
+        "unallocated_markdown_table": decoded["unallocated_md"],
+        "unsupported_model_name_markdown_table": decoded["unsupported_md"],
+        "markdown_all_tables": decoded["md_all"],
         # Diagnostics
         "objective_breakdown": {
             "additive_specs_info": additive_specs_info,
-            "achieved_additive_raw": achieved,
+            "achieved_additive_raw": decoded["achieved"],
             "structural_normalizers": {
                 "extra_plants_max": extra_plants_max,
                 "plants_used_max": plants_used_max,
@@ -533,12 +452,12 @@ def optimize_plants_assignment(
                 "threshold": soft_min_qty_of_items_same_model_name_in_a_plant,
                 "weight": w_soft_min_qty_of_items_same_model_name_in_a_plant,
                 "allowed_pairs": sum(1 for fam in unique_names for p in range(P) if fam in allowed_sets[p]),
-                "denom_soft": denom_soft,                    # added to aid weight tuning
+                "denom_soft": denom_soft,
                 "coef": c_soft,
-                "total_shortfall": soft_shortfall_total,
-                "shortfall_by_pair": soft_shortfall_by_pair,  # {(model name, plant): value}
+                "total_shortfall": decoded["soft_shortfall_total"],
+                "shortfall_by_pair": decoded["soft_shortfall_by_pair"],
             },
             "coefficients": {"K": K, "c_group": c_group, "c_plants": c_plants},
-            "status": "OPTIMAL" if status == cp_model.OPTIMAL else ("FEASIBLE" if status == cp_model.FEASIBLE else "INFEASIBLE"),
+            "status": s.StatusName(status),
         },
     }
